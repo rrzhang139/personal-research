@@ -2,6 +2,12 @@
 
 ## You are a robotics research agent working on a RunPod GPU instance.
 
+## IMPORTANT: Always Check Project README
+**Before working on any project, ALWAYS read the README.md in the project root directory first.**
+- Each project folder (e.g., `residual-rl/`) may have its own README with specific setup instructions, usage notes, and important details
+- The README contains project-specific information that overrides general guidelines
+- After reading the README, proceed with the task using the project-specific context
+
 ## Critical: Volume Persistence
 - **ALL work lives in `/workspace/`** — this is the persistent volume disk
 - The container disk (`/root/`, `/usr/`, etc.) is WIPED on every pod stop/restart
@@ -52,12 +58,47 @@ source /workspace/code/personal-research/residual-rl/.venv/bin/activate
 ├── code/                 # All git repos
 │   ├── personal-research/  # This repo (projects + runpod scripts)
 │   └── LIBERO/             # LIBERO benchmark (if needed)
-├── datasets/             # LIBERO, DROID, ManiSkill assets
+├── datasets/             # Downloaded datasets (see Datasets & Checkpoints section below)
+│   └── maniskill_demos/  # ManiSkill3 demos (downloaded + converted)
 ├── results/              # Experiment outputs, CSVs, rollout videos
-├── models/               # Downloaded model checkpoints
+├── checkpoints/          # Model checkpoints (downloaded from W&B artifacts)
+├── models/               # Downloaded model checkpoints (legacy)
 ├── .cache/huggingface/   # HF model cache (persists, no re-download)
 └── wandb/                # W&B run logs
 ```
+
+## Datasets & Checkpoints (W&B Artifacts)
+
+### ManiSkill3 Demos
+**Download demos:**
+```bash
+python -m mani_skill.utils.download_demo "PegInsertionSide-v1"
+# Saved to: ~/.maniskill/demos/PegInsertionSide-v1/
+# Default control mode: pd_joint_delta_pos
+```
+
+**Convert to pd_ee_delta_pose (end-effector control):**
+```bash
+python -m mani_skill.trajectory.replay_trajectory \
+  --traj-path ~/.maniskill/demos/PegInsertionSide-v1/motionplanning/trajectory.h5 \
+  --save-traj \
+  -c pd_ee_delta_pose \
+  -o state
+
+# Output: trajectory.state.pd_ee_delta_pose.physx_cpu.h5
+# Location: /workspace/datasets/maniskill_demos/PegInsertionSide-v1/motionplanning/
+```
+
+### W&B Artifacts
+**Pretrained diffusion policy checkpoint:**
+- Project: `rzhang139/policy_decorator`
+- Artifact: `diffusion_base_policy:latest`
+- Contents: `best.pt` (checkpoint), `args.json` (training config)
+- Download:
+  ```bash
+  wandb artifact get rzhang139/policy_decorator/diffusion_base_policy:latest \
+    --root /workspace/checkpoints
+  ```
 
 ## Scripts (in runpod/ directory of this repo)
 
