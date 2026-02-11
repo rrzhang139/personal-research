@@ -1,7 +1,7 @@
 #!/bin/bash
 # setup.sh — FIRST TIME ONLY on a brand new pod
+# Uses uv (10-100x faster than pip) for package management
 # Creates venv in /workspace so packages survive pod stop/restart
-# After this, use restart.sh on each pod restart
 set -e
 
 echo "=== First-Time Pod Setup ==="
@@ -19,22 +19,26 @@ source /workspace/.env
 mkdir -p /workspace/{code,datasets,results,models}
 mkdir -p /workspace/.cache/huggingface
 
+# ---- Install uv (fast Python package manager) ----
+echo "--- Installing uv ---"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+
 # ---- Python venv in /workspace (survives stop) ----
 echo "--- Creating Python venv ---"
-python3 -m venv /workspace/venv
+uv venv /workspace/venv --python 3.11
 source /workspace/venv/bin/activate
 
 # ---- Core ML packages ----
 echo "--- Installing core packages ---"
-pip install -q --upgrade pip setuptools wheel
-pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cu124
-pip install -q numpy scipy matplotlib pandas tqdm ipython
+uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+uv pip install numpy scipy matplotlib pandas tqdm ipython
 
 # ---- Robotics sim packages ----
 echo "--- Installing robotics sim packages ---"
-pip install -q mujoco gymnasium
-pip install -q robosuite
-pip install -q mani-skill  # ManiSkill 3
+uv pip install mujoco gymnasium
+uv pip install robosuite
+uv pip install mani-skill  # ManiSkill 3
 
 # ---- LIBERO (from source for latest) ----
 echo "--- Installing LIBERO ---"
@@ -42,20 +46,19 @@ cd /workspace/code
 if [ ! -d "LIBERO" ]; then
     git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git
 fi
-cd LIBERO && pip install -q -e . && cd /workspace
+cd LIBERO && uv pip install -e . && cd /workspace
 
-# ---- Isaac Lab (optional — uncomment if needed) ----
+# ---- Isaac Lab (optional — uncomment if needed, ~10GB) ----
 # echo "--- Installing Isaac Lab ---"
-# pip install isaaclab[isaacsim,all]==2.3.2 --extra-index-url https://pypi.nvidia.com
+# uv pip install isaaclab[isaacsim,all]==2.3.2 --extra-index-url https://pypi.nvidia.com
 
 # ---- VLA / ML packages ----
 echo "--- Installing ML packages ---"
-pip install -q transformers accelerate safetensors
-pip install -q huggingface_hub wandb
-pip install -q diffusers  # for diffusion policies
-pip install -q einops timm  # common VLA deps
+uv pip install transformers accelerate safetensors
+uv pip install huggingface_hub wandb
+uv pip install diffusers einops timm
 
-# ---- Auth (write to /workspace so it persists through stop) ----
+# ---- Auth ----
 echo "--- Setting up auth ---"
 git config --global user.name "$GIT_NAME"
 git config --global user.email "$GIT_EMAIL"
@@ -66,18 +69,20 @@ export HF_HOME=/workspace/.cache/huggingface
 huggingface-cli login --token "$HF_TOKEN"
 wandb login "$WANDB_API_KEY"
 
-# ---- Persist env vars for future sessions ----
+# ---- Persist env vars + venv activation for all future sessions ----
 cat > /workspace/.bashrc_pod << 'ENVEOF'
+source /workspace/.env 2>/dev/null
 source /workspace/venv/bin/activate
+export PATH="$HOME/.local/bin:$PATH"
 export HF_HOME=/workspace/.cache/huggingface
 export WANDB_DIR=/workspace
-source /workspace/.env 2>/dev/null
+export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
 git config --global credential.helper "store --file=/workspace/.git-credentials"
-git config --global user.name "$GIT_NAME"
-git config --global user.email "$GIT_EMAIL"
+git config --global user.name "${GIT_NAME}"
+git config --global user.email "${GIT_EMAIL}"
 ENVEOF
 
-# ---- Clone this repo if not already ----
+# ---- Clone this repo ----
 cd /workspace/code
 if [ ! -d "personal-research" ]; then
     git clone https://github.com/rrzhang139/personal-research.git
@@ -89,11 +94,11 @@ if ! command -v claude &> /dev/null; then
     curl -fsSL https://claude.ai/install.sh | bash
 fi
 
-# ---- Install tmux (usually pre-installed but just in case) ----
+# ---- tmux ----
 apt-get update -qq && apt-get install -qq -y tmux > /dev/null 2>&1 || true
 
 echo ""
-echo "=== First-time setup complete ==="
+echo "=== Setup complete ==="
 echo ""
 echo "Run:"
 echo "  source /workspace/.bashrc_pod"

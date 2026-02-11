@@ -1,12 +1,20 @@
 #!/bin/bash
 # restart.sh — Run EVERY TIME after pod stop→start
-# /workspace survived, but container disk (git config, claude binary) was wiped
+# /workspace survived (venv, packages, models, code all intact)
+# Container disk was wiped (git config, claude binary, uv binary gone)
 set -e
 
 echo "=== Pod Restart Recovery ==="
 
-# Source everything from /workspace
+# ---- Restore everything from /workspace ----
 source /workspace/.bashrc_pod
+
+# ---- Reinstall uv (binary was on container disk) ----
+if ! command -v uv &> /dev/null; then
+    echo "--- Reinstalling uv ---"
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+fi
 
 # ---- Reinstall Claude Code (binary was on container disk) ----
 if ! command -v claude &> /dev/null; then
@@ -21,7 +29,8 @@ fi
 
 echo ""
 echo "=== Ready ==="
-echo "Venv active, auth restored, Claude Code installed."
+echo "Venv active. Auth restored. ANTHROPIC_API_KEY set."
+echo "All packages still installed (from /workspace/venv)."
 echo ""
 echo "Run:"
 echo "  tmux new -s work"
