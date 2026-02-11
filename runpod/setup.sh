@@ -112,7 +112,7 @@ fi
 # ---- Install Claude Code to /workspace ----
 echo "--- Installing Claude Code ---"
 export CLAUDE_INSTALL_DIR=/workspace/.local/bin
-curl -fsSL https://claude.ai/install.sh | sh
+curl -fsSL https://claude.ai/install.sh | bash
 
 echo ""
 echo "=== Setup complete ==="
