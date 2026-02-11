@@ -84,7 +84,7 @@ git config --global user.email "$GIT_EMAIL"
 echo "https://${GITHUB_TOKEN}@github.com" > /workspace/.git-credentials
 git config --global credential.helper "store --file=/workspace/.git-credentials"
 
-/workspace/venv/bin/python -m huggingface_hub.commands.huggingface_cli login --token "$HF_TOKEN"
+/workspace/venv/bin/python -c "from huggingface_hub import login; login(token='$HF_TOKEN')"
 /workspace/venv/bin/python -m wandb login "$WANDB_API_KEY"
 
 # ---- Persist env vars for all future sessions ----
