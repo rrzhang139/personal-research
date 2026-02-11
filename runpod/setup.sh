@@ -10,14 +10,26 @@ echo "=== First-Time Pod Setup ==="
 if [ ! -f /workspace/.env ]; then
     echo "[ERROR] /workspace/.env not found."
     echo "Upload it first:"
-    echo "  scp -i ~/.ssh/runpod .env <user>@ssh.runpod.io:/workspace/.env"
+    echo "  scp -O -i ~/.ssh/runpod .env <user>@ssh.runpod.io:/workspace/.env"
     exit 1
 fi
 source /workspace/.env
 
+# ---- Essential system packages ----
+echo "--- Installing system packages ---"
+apt-get update -qq && apt-get install -qq -y \
+    vim htop tree wget curl git tmux \
+    build-essential cmake \
+    libgl1-mesa-glx libegl1-mesa libglib2.0-0 \
+    > /dev/null 2>&1
+
 # ---- Directory structure (all in /workspace = survives stop) ----
 mkdir -p /workspace/{code,datasets,results,models}
 mkdir -p /workspace/.cache/huggingface
+mkdir -p /workspace/.claude
+
+# ---- Symlink ~/.claude → /workspace/.claude (auth persists through restart) ----
+ln -sfn /workspace/.claude ~/.claude
 
 # ---- Install uv (fast Python package manager) ----
 echo "--- Installing uv ---"
@@ -76,10 +88,11 @@ source /workspace/venv/bin/activate
 export PATH="$HOME/.local/bin:$PATH"
 export HF_HOME=/workspace/.cache/huggingface
 export WANDB_DIR=/workspace
-export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
 git config --global credential.helper "store --file=/workspace/.git-credentials"
 git config --global user.name "${GIT_NAME}"
 git config --global user.email "${GIT_EMAIL}"
+# Symlink claude auth to volume so it persists
+ln -sfn /workspace/.claude ~/.claude
 ENVEOF
 
 # ---- Clone this repo ----
@@ -94,13 +107,13 @@ if ! command -v claude &> /dev/null; then
     curl -fsSL https://claude.ai/install.sh | bash
 fi
 
-# ---- tmux ----
-apt-get update -qq && apt-get install -qq -y tmux > /dev/null 2>&1 || true
-
 echo ""
 echo "=== Setup complete ==="
 echo ""
 echo "Run:"
 echo "  source /workspace/.bashrc_pod"
 echo "  tmux new -s work"
-echo "  claude"
+echo "  claude              # first time: it will give you a URL to login in browser"
+echo ""
+echo "Claude Code login is ONE TIME — auth token saved to /workspace/.claude/"
+echo "It will survive pod stop/restart."

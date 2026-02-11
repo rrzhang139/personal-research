@@ -12,8 +12,9 @@
 ## Directory Layout
 ```
 /workspace/
-├── .env                  # Auth tokens (HF, GitHub, W&B, Anthropic) — source this
+├── .env                  # Auth tokens (HF, GitHub, W&B) — source this
 ├── .bashrc_pod           # Auto-sources .env, activates venv, sets env vars
+├── .claude/              # Claude Code auth (symlinked from ~/.claude, persists)
 ├── venv/                 # Python venv via uv (persists through stop/restart)
 ├── code/                 # All git repos
 │   ├── personal-research/  # This repo
@@ -50,7 +51,12 @@ Source this at the start of every session (restart.sh does it for you):
 ```bash
 source /workspace/.bashrc_pod
 ```
-This activates the venv, sets HF_HOME, WANDB_DIR, ANTHROPIC_API_KEY, and git credentials.
+This activates the venv, sets HF_HOME, WANDB_DIR, git credentials, and symlinks `~/.claude` to `/workspace/.claude`.
+
+## Claude Code Auth
+- Uses subscription OAuth (not API key). First time: `claude` shows a URL → open in browser → login → done.
+- Auth token saved to `/workspace/.claude/` (symlinked from `~/.claude`), persists through stop/restart.
+- No need to re-authenticate after pod restart.
 
 ## Installed Simulation Frameworks
 - **MuJoCo** — lightweight physics sim, runs on any GPU
