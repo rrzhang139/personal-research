@@ -1,7 +1,6 @@
 #!/bin/bash
 # setup.sh — FIRST TIME ONLY on a brand new pod
-# Uses uv (10-100x faster than pip) for package management
-# Creates venv in /workspace so packages survive pod stop/restart
+# EVERYTHING lives in /workspace/ — container disk is only 5GB, not enough for anything
 set -e
 
 echo "=== First-Time Pod Setup ==="
@@ -9,13 +8,20 @@ echo "=== First-Time Pod Setup ==="
 # Load tokens from /workspace/.env
 if [ ! -f /workspace/.env ]; then
     echo "[ERROR] /workspace/.env not found."
-    echo "Upload it first:"
-    echo "  scp -O -i ~/.ssh/runpod .env <user>@ssh.runpod.io:/workspace/.env"
+    echo "Create it with: cat > /workspace/.env << 'EOF' ... EOF"
     exit 1
 fi
 source /workspace/.env
 
-# ---- Essential system packages ----
+# ---- Redirect ALL caches to /workspace (container disk is only 5GB) ----
+export UV_CACHE_DIR=/workspace/.cache/uv
+export PIP_CACHE_DIR=/workspace/.cache/pip
+export XDG_CACHE_HOME=/workspace/.cache
+export HF_HOME=/workspace/.cache/huggingface
+export WANDB_DIR=/workspace
+mkdir -p /workspace/.cache/{uv,pip,huggingface}
+
+# ---- Essential system packages (small, ok on container) ----
 echo "--- Installing system packages ---"
 apt-get update -qq && apt-get install -qq -y \
     vim htop tree wget curl git tmux \
@@ -23,20 +29,22 @@ apt-get update -qq && apt-get install -qq -y \
     libgl1-mesa-glx libegl1-mesa libglib2.0-0 \
     > /dev/null 2>&1
 
-# ---- Directory structure (all in /workspace = survives stop) ----
+# ---- Directory structure ----
 mkdir -p /workspace/{code,datasets,results,models}
-mkdir -p /workspace/.cache/huggingface
 mkdir -p /workspace/.claude
 
-# ---- Symlink ~/.claude → /workspace/.claude (auth persists through restart) ----
+# ---- Symlink ~/.claude → /workspace/.claude (auth persists) ----
 ln -sfn /workspace/.claude ~/.claude
 
-# ---- Install uv (fast Python package manager) ----
+# ---- Install uv to /workspace/.local (not container) ----
 echo "--- Installing uv ---"
+export CARGO_HOME=/workspace/.cargo
+export UV_INSTALL_DIR=/workspace/.local/bin
+mkdir -p /workspace/.local/bin
 curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="/workspace/.local/bin:$PATH"
 
-# ---- Python venv in /workspace (survives stop) ----
+# ---- Python venv in /workspace ----
 echo "--- Creating Python venv ---"
 uv venv /workspace/venv --python 3.11
 source /workspace/venv/bin/activate
@@ -50,9 +58,9 @@ uv pip install numpy scipy matplotlib pandas tqdm ipython
 echo "--- Installing robotics sim packages ---"
 uv pip install mujoco gymnasium
 uv pip install robosuite
-uv pip install mani-skill  # ManiSkill 3
+uv pip install mani-skill
 
-# ---- LIBERO (from source for latest) ----
+# ---- LIBERO ----
 echo "--- Installing LIBERO ---"
 cd /workspace/code
 if [ ! -d "LIBERO" ]; then
@@ -60,8 +68,7 @@ if [ ! -d "LIBERO" ]; then
 fi
 cd LIBERO && uv pip install -e . && cd /workspace
 
-# ---- Isaac Lab (optional — uncomment if needed, ~10GB) ----
-# echo "--- Installing Isaac Lab ---"
+# ---- Isaac Lab (optional) ----
 # uv pip install isaaclab[isaacsim,all]==2.3.2 --extra-index-url https://pypi.nvidia.com
 
 # ---- VLA / ML packages ----
@@ -77,21 +84,22 @@ git config --global user.email "$GIT_EMAIL"
 echo "https://${GITHUB_TOKEN}@github.com" > /workspace/.git-credentials
 git config --global credential.helper "store --file=/workspace/.git-credentials"
 
-export HF_HOME=/workspace/.cache/huggingface
 huggingface-cli login --token "$HF_TOKEN"
 wandb login "$WANDB_API_KEY"
 
-# ---- Persist env vars + venv activation for all future sessions ----
+# ---- Persist env vars for all future sessions ----
 cat > /workspace/.bashrc_pod << 'ENVEOF'
 source /workspace/.env 2>/dev/null
 source /workspace/venv/bin/activate
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="/workspace/.local/bin:$PATH"
+export UV_CACHE_DIR=/workspace/.cache/uv
+export PIP_CACHE_DIR=/workspace/.cache/pip
+export XDG_CACHE_HOME=/workspace/.cache
 export HF_HOME=/workspace/.cache/huggingface
 export WANDB_DIR=/workspace
 git config --global credential.helper "store --file=/workspace/.git-credentials"
 git config --global user.name "${GIT_NAME}"
 git config --global user.email "${GIT_EMAIL}"
-# Symlink claude auth to volume so it persists
 ln -sfn /workspace/.claude ~/.claude
 ENVEOF
 
@@ -101,11 +109,10 @@ if [ ! -d "personal-research" ]; then
     git clone https://github.com/rrzhang139/personal-research.git
 fi
 
-# ---- Install Claude Code ----
+# ---- Install Claude Code to /workspace ----
 echo "--- Installing Claude Code ---"
-if ! command -v claude &> /dev/null; then
-    curl -fsSL https://claude.ai/install.sh | bash
-fi
+export CLAUDE_INSTALL_DIR=/workspace/.local/bin
+curl -fsSL https://claude.ai/install.sh | sh
 
 echo ""
 echo "=== Setup complete ==="
@@ -113,7 +120,4 @@ echo ""
 echo "Run:"
 echo "  source /workspace/.bashrc_pod"
 echo "  tmux new -s work"
-echo "  claude              # first time: it will give you a URL to login in browser"
-echo ""
-echo "Claude Code login is ONE TIME — auth token saved to /workspace/.claude/"
-echo "It will survive pod stop/restart."
+echo "  claude"

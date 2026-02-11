@@ -8,6 +8,8 @@
 - Never store anything important outside `/workspace/`
 - Python venv is at `/workspace/venv` — always activate it: `source /workspace/venv/bin/activate`
 - Package manager is `uv` (10-100x faster than pip). Use `uv pip install` instead of `pip install`
+- ALL caches (uv, pip, HF, wandb) redirected to `/workspace/.cache/` — container disk is only 5GB
+- Binaries (uv, claude) installed to `/workspace/.local/bin/`
 
 ## Directory Layout
 ```
