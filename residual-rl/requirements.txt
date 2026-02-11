@@ -22,3 +22,4 @@ wandb
 opencv-python
 moviepy
 pytest
+setuptools<71  # sapien needs pkg_resources, removed in setuptools>=72

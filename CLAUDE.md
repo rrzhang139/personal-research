@@ -159,6 +159,8 @@ SSHEOF
 - **Always use wandb**: Log all experiments to Weights & Biases for tracking
 - **Save results to /workspace/results/** with descriptive names
 - **Commit code frequently** to `/workspace/code/personal-research/`
+- **Always export `HDF5_USE_FILE_LOCKING=FALSE`** — RunPod's NFS-backed `/workspace/` volume doesn't support h5py file locking; without this, any HDF5 read/write will fail with `BlockingIOError: Unable to lock file`
+- **ManiSkill demos need conversion**: Raw demos from `mani_skill.utils.download_demo` use `obs_mode='none'`. Before training, replay them with `python -m mani_skill.trajectory.replay_trajectory --traj-path <path> -o state -c <control_mode> --save-traj` to get flat state observations and the desired control mode. Converted files are saved alongside the original with a suffix like `.state.pd_ee_delta_pose.physx_cpu.h5`
 
 ## Memory Note
 After a fresh pod restart, `free -h` may show ~76GB "used" out of 124GB. This is normal:

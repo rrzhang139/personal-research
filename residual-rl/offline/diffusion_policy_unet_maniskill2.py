@@ -112,6 +112,42 @@ import mani_skill.envs
 import envs.maniskill_fixed # register the environments for policy decorator
 from mani_skill.utils.wrappers.record import RecordEpisode
 
+class CPUNumpyWrapper(gym.ObservationWrapper):
+    """Convert ManiSkill3 torch tensor observations to numpy and squeeze the num_envs dimension."""
+    def __init__(self, env):
+        super().__init__(env)
+        obs_space = env.observation_space
+        if hasattr(obs_space, 'shape') and len(obs_space.shape) == 2 and obs_space.shape[0] == 1:
+            # Squeeze (1, obs_dim) -> (obs_dim,)
+            self.observation_space = gym.spaces.Box(
+                low=obs_space.low.reshape(-1), high=obs_space.high.reshape(-1), dtype=obs_space.dtype)
+        # Fix action space bounds if they are inf (ManiSkill may not set them to [-1,1])
+        act_space = env.action_space
+        if hasattr(act_space, 'low'):
+            low = act_space.low.reshape(-1) if hasattr(act_space.low, 'reshape') else act_space.low
+            high = act_space.high.reshape(-1) if hasattr(act_space.high, 'reshape') else act_space.high
+            if hasattr(low, 'cpu'):
+                low, high = low.cpu().numpy(), high.cpu().numpy()
+            self.action_space = gym.spaces.Box(low=low, high=high, dtype=np.float32)
+
+    def observation(self, obs):
+        if hasattr(obs, 'cpu'):
+            obs = obs.cpu().numpy()
+        if obs.ndim == 2 and obs.shape[0] == 1:
+            obs = obs.squeeze(0)
+        return np.asarray(obs, dtype=np.float32)
+
+    def step(self, action):
+        obs, rew, terminated, truncated, info = self.env.step(action)
+        # Convert all torch tensors to numpy scalars
+        if hasattr(rew, 'item'):
+            rew = rew.item()
+        if hasattr(terminated, 'item'):
+            terminated = terminated.item()
+        if hasattr(truncated, 'item'):
+            truncated = truncated.item()
+        return self.observation(obs), float(rew), bool(terminated), bool(truncated), info
+
 class SeqActionWrapper(gym.Wrapper):
     def step(self, action_seq):
         rew_sum = 0
@@ -129,7 +165,8 @@ def make_env(env_id, seed, control_mode=None, video_dir=None, other_kwargs={}):
                         render_mode='cameras' if video_dir else None, **env_kwargs)
         if video_dir:
             env = RecordEpisode(env, output_dir=video_dir, save_trajectory=False, info_on_video=True)
-        
+
+        env = CPUNumpyWrapper(env)  # ManiSkill3 returns torch tensors with (1, obs_dim); convert to numpy (obs_dim,)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
         env = gym.wrappers.FrameStack(env, other_kwargs['obs_horizon'])
