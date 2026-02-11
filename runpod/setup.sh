@@ -27,6 +27,7 @@ apt-get update -qq && apt-get install -qq -y \
     vim htop tree wget curl git tmux \
     build-essential cmake \
     libgl1-mesa-glx libegl1-mesa libglib2.0-0 \
+    nodejs npm \
     > /dev/null 2>&1
 
 # ---- Directory structure ----
