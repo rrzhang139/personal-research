@@ -29,11 +29,6 @@ apt-get update -qq && apt-get install -qq -y \
     libgl1-mesa-glx libegl1-mesa libglib2.0-0 \
     > /dev/null 2>&1
 
-# ---- Node.js (needed for Claude Code npm install) ----
-echo "--- Installing Node.js ---"
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null 2>&1
-apt-get install -qq -y nodejs > /dev/null 2>&1
-
 # ---- Directory structure ----
 mkdir -p /workspace/{code,datasets,results,models}
 mkdir -p /workspace/.claude
@@ -114,14 +109,11 @@ if [ ! -d "personal-research" ]; then
     git clone https://github.com/rrzhang139/personal-research.git
 fi
 
-# ---- Install Claude Code via npm (native installer stalls on RunPod) ----
-echo "--- Installing Claude Code ---"
-npm install -g @anthropic-ai/claude-code
-
 echo ""
 echo "=== Setup complete ==="
 echo ""
 echo "Run:"
 echo "  source /workspace/.bashrc_pod"
-echo "  tmux new -s work"
-echo "  claude"
+echo ""
+echo "Claude Code runs on your LOCAL machine and controls this pod via SSH:"
+echo "  ssh -tt oytehiveq30siz-644113ed@ssh.runpod.io -i ~/.ssh/runpod"
