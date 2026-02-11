@@ -1,0 +1,22 @@
+name: pi-dec
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pytorch-cuda=12.4
+  - pytorch=2.4.0
+  - tensorboard
+  - wandb
+  - opencv
+  - pytest
+  - moviepy
+  - einops
+  - diffusers
+  - pip:
+    - mani-skill  # ManiSkill 3
+    - gymnasium
+    - gymnasium-robotics
+    - stable-baselines3
