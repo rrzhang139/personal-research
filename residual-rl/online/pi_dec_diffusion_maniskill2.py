@@ -120,6 +120,22 @@ import envs.maniskill_fixed # register the environments for policy decorator
 from mani_skill.utils.wrappers.record import RecordEpisode
 gym.logger.set_level(gym.logger.DEBUG)
 
+class FlattenMS3ObsWrapper(gym.ObservationWrapper):
+    """Flatten ManiSkill3 observations from (1, obs_dim) to (obs_dim,)"""
+    def observation(self, obs):
+        return obs.flatten()
+
+    def _update_obs_space(self):
+        self.observation_space = gym.spaces.Box(
+            low=self.env.observation_space.low.flatten(),
+            high=self.env.observation_space.high.flatten(),
+            dtype=self.env.observation_space.dtype
+        )
+
+    def __init__(self, env):
+        super().__init__(env)
+        self._update_obs_space()
+
 class SeqActionWrapper(gym.Wrapper):
     def step(self, action_seq):
         rew_sum = 0
@@ -139,6 +155,7 @@ def make_env(env_id, seed, control_mode=None, video_dir=None, other_kwargs={}):
             env = RecordEpisode(env, output_dir=video_dir, save_trajectory=False, info_on_video=True)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
+        env = FlattenMS3ObsWrapper(env)  # Flatten (1, obs_dim) -> (obs_dim) for ManiSkill3
         env = gym.wrappers.FrameStack(env, other_kwargs['obs_horizon'])
         env = SeqActionWrapper(env)
 
