@@ -27,8 +27,12 @@ apt-get update -qq && apt-get install -qq -y \
     vim htop tree wget curl git tmux \
     build-essential cmake \
     libgl1-mesa-glx libegl1-mesa libglib2.0-0 \
-    nodejs npm \
     > /dev/null 2>&1
+
+# ---- Node.js (needed for Claude Code npm install) ----
+echo "--- Installing Node.js ---"
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null 2>&1
+apt-get install -qq -y nodejs > /dev/null 2>&1
 
 # ---- Directory structure ----
 mkdir -p /workspace/{code,datasets,results,models}
