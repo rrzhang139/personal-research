@@ -1,7 +1,7 @@
 #!/bin/bash
 # restart.sh — Run EVERY TIME after pod stop→start
-# System packages and Node.js are on container disk (wiped on stop).
-# Project venvs in /workspace/ survive.
+# System packages are on container disk (wiped on stop).
+# Everything else (venvs, claude binary, caches, auth) lives on /workspace/ volume.
 set -e
 
 echo "=== Pod Restart Recovery ==="
@@ -9,7 +9,7 @@ echo "=== Pod Restart Recovery ==="
 # ---- Restore env vars and paths from /workspace ----
 source /workspace/.bashrc_pod
 
-# ---- Reinstall system packages (wiped on stop) ----
+# ---- Reinstall system packages (wiped on stop, ~30s) ----
 echo "--- Reinstalling system packages ---"
 apt-get update -qq && apt-get install -qq -y \
     vim htop tree wget curl git tmux \
@@ -17,27 +17,24 @@ apt-get update -qq && apt-get install -qq -y \
     libgl1-mesa-glx libegl1-mesa libglib2.0-0 \
     > /dev/null 2>&1
 
-# ---- Node.js + Claude Code (wiped on stop) ----
-echo "--- Reinstalling Node.js + Claude Code ---"
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null 2>&1
-apt-get install -qq -y nodejs > /dev/null 2>&1
-npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
-
-# ---- Restore symlinks ----
+# ---- Restore symlinks (container home is wiped) ----
+echo "--- Restoring symlinks ---"
 ln -sfn /workspace/.claude ~/.claude
+ln -sf /workspace/.netrc ~/.netrc
+
+# ---- Claude Code: symlink from volume binary (no reinstall needed) ----
+echo "--- Linking Claude Code from volume ---"
+ln -sf /workspace/.local/bin/claude /usr/local/bin/claude
 
 # ---- Recreate dev user (container user db wiped on stop) ----
 echo "--- Setting up dev user ---"
 useradd -m -s /bin/bash dev 2>/dev/null || true
-cp /usr/local/bin/claude /usr/local/bin/claude 2>/dev/null || \
-    cp /root/.local/bin/claude /usr/local/bin/claude 2>/dev/null || true
-chmod 755 /usr/local/bin/claude 2>/dev/null || true
 ln -sfn /workspace/.claude /home/dev/.claude
 chmod -R 777 /workspace/.claude 2>/dev/null
 
 echo ""
 echo "=== Ready ==="
-echo "System tools restored. Project venvs in /workspace/ are intact."
+echo "System tools restored. Everything else intact on /workspace/."
 echo ""
 echo "Activate a project:"
 echo "  proj residual-rl"

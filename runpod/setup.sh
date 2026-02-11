@@ -63,6 +63,10 @@ uv run --python 3.11 python -c "from huggingface_hub import login; login(token='
 uv run --python 3.11 python -m wandb login "$WANDB_API_KEY" 2>/dev/null || \
     echo "[WARN] wandb login failed — run manually after project env setup"
 
+# Persist wandb netrc to volume (default goes to /root/.netrc which is wiped)
+cp /root/.netrc /workspace/.netrc 2>/dev/null || true
+ln -sf /workspace/.netrc /root/.netrc
+
 # ---- Persist env vars for all future sessions ----
 cat > /workspace/.bashrc_pod << 'ENVEOF'
 source /workspace/.env 2>/dev/null
@@ -76,6 +80,7 @@ git config --global credential.helper "store --file=/workspace/.git-credentials"
 git config --global user.name "${GIT_NAME}"
 git config --global user.email "${GIT_EMAIL}"
 ln -sfn /workspace/.claude ~/.claude
+ln -sf /workspace/.netrc ~/.netrc
 
 # Helper: activate a project env
 proj() {
@@ -96,15 +101,22 @@ if [ ! -d "personal-research" ]; then
     git clone https://github.com/rrzhang139/personal-research.git
 fi
 
-# ---- Install Claude Code via npm ----
+# ---- Install Claude Code ----
 echo "--- Installing Claude Code ---"
-npm install -g @anthropic-ai/claude-code
+if [ -f /workspace/.local/bin/claude ]; then
+    echo "Claude Code binary found on volume, skipping install"
+    ln -sf /workspace/.local/bin/claude /usr/local/bin/claude
+else
+    npm install -g @anthropic-ai/claude-code
+    # Persist binary to volume so we don't reinstall on restart
+    cp "$(which claude)" /workspace/.local/bin/claude 2>/dev/null || true
+    ln -sf /workspace/.local/bin/claude /usr/local/bin/claude
+fi
+chmod 755 /workspace/.local/bin/claude 2>/dev/null || true
 
 # ---- Create non-root user for --dangerously-skip-permissions ----
 echo "--- Creating dev user ---"
 useradd -m -s /bin/bash dev 2>/dev/null || true
-cp /usr/local/bin/claude /usr/local/bin/claude 2>/dev/null || true
-chmod 755 /usr/local/bin/claude 2>/dev/null || true
 ln -sfn /workspace/.claude /home/dev/.claude
 chmod -R 777 /workspace/.claude 2>/dev/null
 
