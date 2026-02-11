@@ -9,7 +9,7 @@
 - Python venv is at `/workspace/venv` — always activate it: `source /workspace/venv/bin/activate`
 - Package manager is `uv` (10-100x faster than pip). Use `uv pip install` instead of `pip install`
 - ALL caches (uv, pip, HF, wandb) redirected to `/workspace/.cache/` — container disk is only 5GB
-- Binaries (uv) installed to `/workspace/.local/bin/`
+- Binaries (uv, claude) installed to `/workspace/.local/bin/`
 
 ## Directory Layout
 ```
@@ -55,9 +55,15 @@ source /workspace/.bashrc_pod
 ```
 This activates the venv, sets HF_HOME, WANDB_DIR, git credentials, and symlinks `~/.claude` to `/workspace/.claude`.
 
-## Claude Code (runs on LOCAL machine, not on the pod)
-Claude Code is NOT installed on the pod (npm install OOMs, OAuth doesn't work on headless servers).
-Instead, Claude Code runs locally and controls the pod via SSH:
+## Claude Code Auth
+- Installed via npm (`npm install -g @anthropic-ai/claude-code`). The native installer stalls on RunPod.
+- Uses subscription OAuth (not API key). First time: `claude` shows a URL → open in browser → login → done.
+- Auth token saved to `/workspace/.claude/` (symlinked from `~/.claude`), persists through stop/restart.
+- No need to re-authenticate after pod restart.
+- If OAuth fails with scope errors on latest version, downgrade: `npm install -g @anthropic-ai/claude-code@2.1.19`
+
+## Remote Access from Local Machine
+Claude Code on a local machine can run commands on this pod via SSH heredoc:
 ```bash
 ssh -tt oytehiveq30siz-644113ed@ssh.runpod.io -i ~/.ssh/runpod << 'SSHEOF'
 source /workspace/.bashrc_pod 2>/dev/null
@@ -66,7 +72,6 @@ exit
 SSHEOF
 ```
 RunPod's SSH gateway requires `-tt` (forced PTY) and ignores command arguments — commands must be piped via stdin/heredoc.
-This works for all non-interactive commands (git, python, uv pip install, etc.).
 
 ## Installed Simulation Frameworks
 - **MuJoCo** — lightweight physics sim, runs on any GPU
