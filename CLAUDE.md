@@ -56,9 +56,22 @@ source /workspace/.bashrc_pod
 This activates the venv, sets HF_HOME, WANDB_DIR, git credentials, and symlinks `~/.claude` to `/workspace/.claude`.
 
 ## Claude Code Auth
+- Installed via npm (`npm install -g @anthropic-ai/claude-code`). The native installer stalls on RunPod.
 - Uses subscription OAuth (not API key). First time: `claude` shows a URL → open in browser → login → done.
 - Auth token saved to `/workspace/.claude/` (symlinked from `~/.claude`), persists through stop/restart.
 - No need to re-authenticate after pod restart.
+- If OAuth fails with scope errors on latest version, downgrade: `npm install -g @anthropic-ai/claude-code@2.1.19`
+
+## Remote Access from Local Machine
+Claude Code on a local machine can run commands on this pod via SSH heredoc:
+```bash
+ssh -tt oytehiveq30siz-644113ed@ssh.runpod.io -i ~/.ssh/runpod << 'SSHEOF'
+source /workspace/.bashrc_pod 2>/dev/null
+# your commands here
+exit
+SSHEOF
+```
+RunPod's SSH gateway requires `-tt` (forced PTY) and ignores command arguments — commands must be piped via stdin/heredoc.
 
 ## Installed Simulation Frameworks
 - **MuJoCo** — lightweight physics sim, runs on any GPU

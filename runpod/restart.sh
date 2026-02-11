@@ -17,6 +17,13 @@ apt-get update -qq && apt-get install -qq -y \
     libgl1-mesa-glx libegl1-mesa libglib2.0-0 \
     > /dev/null 2>&1
 
+# ---- Reinstall Claude Code (npm global packages are on container disk) ----
+echo "--- Reinstalling Claude Code ---"
+npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
+
+# ---- Restore Claude Code auth symlink ----
+ln -sfn /workspace/.claude ~/.claude
+
 echo ""
 echo "=== Ready ==="
 echo "Venv active. uv, claude, all packages in /workspace/."

@@ -109,10 +109,9 @@ if [ ! -d "personal-research" ]; then
     git clone https://github.com/rrzhang139/personal-research.git
 fi
 
-# ---- Install Claude Code to /workspace ----
+# ---- Install Claude Code via npm (native installer stalls on RunPod) ----
 echo "--- Installing Claude Code ---"
-export CLAUDE_INSTALL_DIR=/workspace/.local/bin
-curl -fsSL https://claude.ai/install.sh | bash
+npm install -g @anthropic-ai/claude-code
 
 echo ""
 echo "=== Setup complete ==="
