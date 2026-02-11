@@ -1,0 +1,9 @@
+.env
+*.pt
+*.safetensors
+*.bin
+*.ckpt
+__pycache__/
+wandb/
+.cache/
+*.tar.gz
