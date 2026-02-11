@@ -75,11 +75,29 @@ source /workspace/code/personal-research/residual-rl/.venv/bin/activate
 ## Two Ways to Use Claude Code with This Pod
 
 ### Option A: Claude Code on the Pod (Interactive)
-- Installed via npm: `npm install -g @anthropic-ai/claude-code`
-- OAuth auth: `claude` shows a URL → open in browser → authorize
 - Auth saved to `/workspace/.claude/`, persists through stop/restart
 - If OAuth scope error, downgrade: `npm install -g @anthropic-ai/claude-code@2.1.19`
-- If npm install OOMs, add swap: `fallocate -l 4G /workspace/swapfile && chmod 600 /workspace/swapfile && mkswap /workspace/swapfile && swapon /workspace/swapfile`
+- If npm install OOMs, add swap first: `fallocate -l 4G /workspace/swapfile && chmod 600 /workspace/swapfile && mkswap /workspace/swapfile && swapon /workspace/swapfile`
+
+**Running with `--dangerously-skip-permissions`:**
+RunPod runs as root, but Claude Code blocks `--dangerously-skip-permissions` as root. Use the `dev` user instead:
+```bash
+# Setup (run once as root, already done if setup.sh was run):
+useradd -m -s /bin/bash dev 2>/dev/null
+cp /root/.local/bin/claude /usr/local/bin/claude 2>/dev/null  # if installed via native installer
+chmod 755 /usr/local/bin/claude 2>/dev/null
+ln -sfn /workspace/.claude /home/dev/.claude
+chmod -R 777 /workspace/.claude
+
+# Run Claude Code as dev user:
+su - dev
+source /workspace/.bashrc_pod
+cd /workspace/code/personal-research
+claude --dangerously-skip-permissions
+
+# Or resume a session:
+su - dev -c 'source /workspace/.bashrc_pod && cd /workspace/code/personal-research && claude --resume SESSION_ID --dangerously-skip-permissions'
+```
 
 ### Option B: Claude Code on Local Machine via SSH (Remote Control)
 Claude Code runs locally and executes commands on the pod via SSH heredoc.

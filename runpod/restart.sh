@@ -26,9 +26,21 @@ npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
 # ---- Restore symlinks ----
 ln -sfn /workspace/.claude ~/.claude
 
+# ---- Recreate dev user (container user db wiped on stop) ----
+echo "--- Setting up dev user ---"
+useradd -m -s /bin/bash dev 2>/dev/null || true
+cp /usr/local/bin/claude /usr/local/bin/claude 2>/dev/null || \
+    cp /root/.local/bin/claude /usr/local/bin/claude 2>/dev/null || true
+chmod 755 /usr/local/bin/claude 2>/dev/null || true
+ln -sfn /workspace/.claude /home/dev/.claude
+chmod -R 777 /workspace/.claude 2>/dev/null
+
 echo ""
 echo "=== Ready ==="
 echo "System tools restored. Project venvs in /workspace/ are intact."
 echo ""
 echo "Activate a project:"
 echo "  proj residual-rl"
+echo ""
+echo "Run Claude Code with skip-permissions:"
+echo "  su - dev -c 'source /workspace/.bashrc_pod && cd /workspace/code/personal-research && claude --dangerously-skip-permissions'"
