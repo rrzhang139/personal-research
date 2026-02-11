@@ -1,5 +1,6 @@
 #!/bin/bash
 # setup.sh — FIRST TIME ONLY on a brand new pod
+# Installs system-level tools and auth only. Project deps are installed per-project.
 # EVERYTHING lives in /workspace/ — container disk is only 5GB, not enough for anything
 set -e
 
@@ -49,39 +50,6 @@ mkdir -p /workspace/.local/bin
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="/workspace/.local/bin:$PATH"
 
-# ---- Python venv in /workspace ----
-echo "--- Creating Python venv ---"
-uv venv /workspace/venv --python 3.11
-source /workspace/venv/bin/activate
-
-# ---- Core ML packages ----
-echo "--- Installing core packages ---"
-uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
-uv pip install numpy scipy matplotlib pandas tqdm ipython
-
-# ---- Robotics sim packages ----
-echo "--- Installing robotics sim packages ---"
-uv pip install mujoco gymnasium
-uv pip install robosuite
-uv pip install mani-skill
-
-# ---- LIBERO ----
-echo "--- Installing LIBERO ---"
-cd /workspace/code
-if [ ! -d "LIBERO" ]; then
-    git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git
-fi
-cd LIBERO && uv pip install -e . && cd /workspace
-
-# ---- Isaac Lab (optional) ----
-# uv pip install isaaclab[isaacsim,all]==2.3.2 --extra-index-url https://pypi.nvidia.com
-
-# ---- VLA / ML packages ----
-echo "--- Installing ML packages ---"
-uv pip install transformers accelerate safetensors
-uv pip install huggingface_hub wandb
-uv pip install diffusers einops timm
-
 # ---- Auth ----
 echo "--- Setting up auth ---"
 git config --global user.name "$GIT_NAME"
@@ -89,13 +57,15 @@ git config --global user.email "$GIT_EMAIL"
 echo "https://${GITHUB_TOKEN}@github.com" > /workspace/.git-credentials
 git config --global credential.helper "store --file=/workspace/.git-credentials"
 
-/workspace/venv/bin/python -c "from huggingface_hub import login; login(token='$HF_TOKEN')"
-/workspace/venv/bin/python -m wandb login "$WANDB_API_KEY"
+# HF and W&B auth (use a temp python for login, no venv needed yet)
+uv run --python 3.11 python -c "from huggingface_hub import login; login(token='$HF_TOKEN')" 2>/dev/null || \
+    echo "[WARN] HF login failed — run manually after project env setup"
+uv run --python 3.11 python -m wandb login "$WANDB_API_KEY" 2>/dev/null || \
+    echo "[WARN] wandb login failed — run manually after project env setup"
 
 # ---- Persist env vars for all future sessions ----
 cat > /workspace/.bashrc_pod << 'ENVEOF'
 source /workspace/.env 2>/dev/null
-source /workspace/venv/bin/activate
 export PATH="/workspace/.local/bin:$PATH"
 export UV_CACHE_DIR=/workspace/.cache/uv
 export PIP_CACHE_DIR=/workspace/.cache/pip
@@ -106,6 +76,18 @@ git config --global credential.helper "store --file=/workspace/.git-credentials"
 git config --global user.name "${GIT_NAME}"
 git config --global user.email "${GIT_EMAIL}"
 ln -sfn /workspace/.claude ~/.claude
+
+# Helper: activate a project env
+proj() {
+    local dir="/workspace/code/personal-research/$1"
+    if [ -f "$dir/.venv/bin/activate" ]; then
+        source "$dir/.venv/bin/activate"
+        cd "$dir"
+        echo "Activated $1 env"
+    else
+        echo "No .venv found in $dir — run: cd $dir && bash setup_env.sh"
+    fi
+}
 ENVEOF
 
 # ---- Clone this repo ----
@@ -114,14 +96,19 @@ if [ ! -d "personal-research" ]; then
     git clone https://github.com/rrzhang139/personal-research.git
 fi
 
-# ---- Install Claude Code via npm (native installer stalls on RunPod) ----
+# ---- Install Claude Code via npm ----
 echo "--- Installing Claude Code ---"
 npm install -g @anthropic-ai/claude-code
 
 echo ""
-echo "=== Setup complete ==="
+echo "=== System setup complete ==="
 echo ""
-echo "Run:"
+echo "Next steps:"
 echo "  source /workspace/.bashrc_pod"
-echo "  tmux new -s work"
-echo "  claude"
+echo ""
+echo "  # Set up a project environment:"
+echo "  cd /workspace/code/personal-research/residual-rl"
+echo "  bash setup_env.sh"
+echo ""
+echo "  # Or use the shortcut after bashrc is sourced:"
+echo "  proj residual-rl"
