@@ -416,14 +416,23 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    # env setup
+    # env setup — load base policy training args if available
     from os.path import dirname as up
     exp_dir = up(up(args.base_policy_ckpt))
-    with open(f'{exp_dir}/args.json', 'r') as f:
-        ckpt_args = json.load(f)
-        for k, v in ckpt_args.items():
-            if k not in args.__dict__:
-                args.__dict__[k] = v
+    args_json_path = f'{exp_dir}/args.json'
+    if os.path.exists(args_json_path):
+        with open(args_json_path, 'r') as f:
+            ckpt_args = json.load(f)
+            for k, v in ckpt_args.items():
+                if k not in args.__dict__:
+                    args.__dict__[k] = v
+    else:
+        print(f'[WARN] No args.json at {args_json_path}, using defaults')
+    # Ensure required base policy args have defaults
+    for k, v in {'obs_horizon': 2, 'pred_horizon': 16, 'diffusion_step_embed_dim': 64,
+                  'unet_dims': [64, 128, 256], 'n_groups': 8, 'control_mode': 'pd_ee_delta_pose'}.items():
+        if k not in args.__dict__:
+            args.__dict__[k] = v
     VecEnv = gym.vector.SyncVectorEnv if args.sync_venv or args.num_envs == 1 \
         else lambda x: gym.vector.AsyncVectorEnv(x, context='forkserver')
     envs = VecEnv(
@@ -449,12 +458,21 @@ if __name__ == "__main__":
     
     # Load base policy
     base_policy = BasePolicy(envs, args).to(device)
-    checkpoint = torch.load(args.base_policy_ckpt)
-    for key in ['ema_agent', 'agent', 'actor', 'q']:
+    checkpoint = torch.load(args.base_policy_ckpt, map_location=device)
+    loaded = False
+    for key in ['agent', 'ema_agent', 'actor', 'q']:
         if key in checkpoint:
-            base_policy.load_state_dict(checkpoint[key])
-            print(f'Loaded agent from checkpoint[{key}]')
-            break
+            try:
+                missing, unexpected = base_policy.load_state_dict(checkpoint[key], strict=False)
+                print(f'Loaded base policy from checkpoint[{key}]')
+                if missing: print(f'  Missing keys: {missing}')
+                if unexpected: print(f'  Unexpected keys: {unexpected}')
+                loaded = True
+                break
+            except RuntimeError as e:
+                print(f'  Failed to load checkpoint[{key}]: {e}')
+                continue
+    assert loaded, 'Failed to load base policy from any key in checkpoint'
     base_policy.eval()
     base_policy.requires_grad_(False)
     
