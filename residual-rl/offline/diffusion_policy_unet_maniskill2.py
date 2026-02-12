@@ -83,6 +83,8 @@ def parse_args():
     parser.add_argument("--num-dataload-workers", type=int, default=0)
     parser.add_argument("--control-mode", type=str, default='pd_ee_delta_pose')
     parser.add_argument("--obj-ids", metavar='N', type=str, nargs='+', default=[])
+    parser.add_argument("--load-ckpt", type=str, default=None,
+        help="path to a pretrained checkpoint to load before training")
 
     args = parser.parse_args()
     args.algo_name = ALGO_NAME
@@ -521,6 +523,30 @@ if __name__ == "__main__":
     print('[INIT] Creating EMA model...')
     ema = EMAModel(parameters=agent.parameters(), power=0.75)
     ema_agent = Agent(envs, args, action_mean=dataset.action_mean, action_std=dataset.action_std).to(device)
+
+    # Load pretrained checkpoint if provided
+    if args.load_ckpt:
+        print(f'[INIT] Loading pretrained checkpoint from {args.load_ckpt}...')
+        ckpt = torch.load(args.load_ckpt, map_location=device)
+        # Load agent weights, skipping action_mean/action_std (use dataset stats instead)
+        agent_sd = ckpt['agent']
+        skip_keys = {'action_mean', 'action_std'}
+        filtered_sd = {k: v for k, v in agent_sd.items() if k not in skip_keys}
+        missing, unexpected = agent.load_state_dict(filtered_sd, strict=False)
+        print(f'[INIT] Agent loaded. Missing: {missing}, Unexpected: {unexpected}')
+        # Load ema_agent weights too
+        if 'ema_agent' in ckpt:
+            ema_sd = ckpt['ema_agent']
+            filtered_ema_sd = {k: v for k, v in ema_sd.items() if k not in skip_keys}
+            missing_ema, unexpected_ema = ema_agent.load_state_dict(filtered_ema_sd, strict=False)
+            print(f'[INIT] EMA agent loaded. Missing: {missing_ema}, Unexpected: {unexpected_ema}')
+        else:
+            # Copy agent weights to ema_agent
+            ema_agent.load_state_dict(agent.state_dict())
+            print('[INIT] No ema_agent in checkpoint, copied agent weights to ema_agent')
+        # Re-init EMA from loaded agent weights
+        ema = EMAModel(parameters=agent.parameters(), power=0.75)
+        print('[INIT] Pretrained checkpoint loaded successfully!')
 
     print('[INIT] Initialization complete!')
     print('=' * 70)
