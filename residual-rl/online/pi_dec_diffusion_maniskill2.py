@@ -101,6 +101,8 @@ def parse_args():
     parser.add_argument("--log-freq", type=int, default=20000)
     parser.add_argument("--save-freq", type=int, default=1_000_000)
     parser.add_argument("--obj-ids", metavar='N', type=str, nargs='+', default=[])
+    parser.add_argument("--pad-obs-to", type=int, default=None,
+        help="Pad obs to this dim (e.g. 50 for MS2 ckpt on MS3 env). Inserts zeros at index 18 for base_pose.")
 
     args = parser.parse_args()
     args.algo_name = ALGO_NAME
@@ -154,6 +156,21 @@ class CPUNumpyWrapper(gym.ObservationWrapper):
             truncated = truncated.item()
         return self.observation(obs), float(rew), bool(terminated), bool(truncated), info
 
+class PadObsWrapper(gym.ObservationWrapper):
+    """Pad MS3 observations (43-dim) to MS2 format (50-dim) by inserting zeros at index 18 (base_pose)."""
+    def __init__(self, env, target_dim):
+        super().__init__(env)
+        self.insert_idx = 18  # base_pose was at indices 18-24 in MS2
+        orig_dim = env.observation_space.shape[0]
+        self.pad_size = target_dim - orig_dim
+        assert self.pad_size > 0, f"target_dim {target_dim} must be > obs_dim {orig_dim}"
+        low = np.insert(env.observation_space.low, self.insert_idx, np.full(self.pad_size, -np.inf))
+        high = np.insert(env.observation_space.high, self.insert_idx, np.full(self.pad_size, np.inf))
+        self.observation_space = gym.spaces.Box(low=low, high=high, dtype=np.float32)
+
+    def observation(self, obs):
+        return np.insert(obs, self.insert_idx, np.zeros(self.pad_size)).astype(np.float32)
+
 class SeqActionWrapper(gym.Wrapper):
     def step(self, action_seq):
         rew_sum = 0
@@ -172,6 +189,8 @@ def make_env(env_id, seed, control_mode=None, video_dir=None, other_kwargs={}):
         if video_dir:
             env = RecordEpisode(env, output_dir=video_dir, save_trajectory=False, info_on_video=True)
         env = CPUNumpyWrapper(env)  # Convert ManiSkill3 torch tensors to numpy + flatten
+        if other_kwargs.get('pad_obs_to'):
+            env = PadObsWrapper(env, other_kwargs['pad_obs_to'])  # Pad 43-dim MS3 obs to 50-dim MS2 format
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
         env = gym.wrappers.FrameStack(env, other_kwargs['obs_horizon'])
