@@ -157,19 +157,23 @@ class CPUNumpyWrapper(gym.ObservationWrapper):
         return self.observation(obs), float(rew), bool(terminated), bool(truncated), info
 
 class PadObsWrapper(gym.ObservationWrapper):
-    """Pad MS3 observations (43-dim) to MS2 format (50-dim) by inserting zeros at index 18 (base_pose)."""
+    """Pad MS3 observations (43-dim) to MS2 format (50-dim) by inserting constant base_pose at index 18.
+    MS2 base_pose for PegInsertionSide: [-0.615, ~0, 0, 1, 0, 0, 0] (pos xyz + quat wxyz)."""
+    MS2_BASE_POSE = np.array([-0.615, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+
     def __init__(self, env, target_dim):
         super().__init__(env)
         self.insert_idx = 18  # base_pose was at indices 18-24 in MS2
         orig_dim = env.observation_space.shape[0]
         self.pad_size = target_dim - orig_dim
-        assert self.pad_size > 0, f"target_dim {target_dim} must be > obs_dim {orig_dim}"
+        assert self.pad_size == 7, f"Expected 7-dim pad (base_pose), got {self.pad_size}"
+        self.pad_values = self.MS2_BASE_POSE
         low = np.insert(env.observation_space.low, self.insert_idx, np.full(self.pad_size, -np.inf))
         high = np.insert(env.observation_space.high, self.insert_idx, np.full(self.pad_size, np.inf))
         self.observation_space = gym.spaces.Box(low=low, high=high, dtype=np.float32)
 
     def observation(self, obs):
-        return np.insert(obs, self.insert_idx, np.zeros(self.pad_size)).astype(np.float32)
+        return np.insert(obs, self.insert_idx, self.pad_values).astype(np.float32)
 
 class SeqActionWrapper(gym.Wrapper):
     def step(self, action_seq):
