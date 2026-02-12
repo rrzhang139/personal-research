@@ -75,7 +75,7 @@ def parse_args():
     # Eval, logging, and others
     parser.add_argument("--output-dir", type=str, default='output')
     parser.add_argument("--log-freq", type=int, default=1000)
-    parser.add_argument("--eval-freq", type=int, default=2000)  # Reduced for faster debugging
+    parser.add_argument("--eval-freq", type=int, default=1000)  # Reduced for faster debugging
     parser.add_argument("--save-freq", type=int, default=100_000)
     parser.add_argument("--num-eval-episodes", type=int, default=100)
     parser.add_argument("--num-eval-envs", type=int, default=10) # NOTE: should not be too large, otherwise bias to short episodes
@@ -113,17 +113,14 @@ import envs.maniskill_fixed # register the environments for policy decorator
 from mani_skill.utils.wrappers.record import RecordEpisode
 
 class CPUNumpyWrapper(gym.ObservationWrapper):
-    """Convert ManiSkill3 torch tensor observations to numpy and flatten to 1D."""
+    """Convert ManiSkill3 torch tensor observations to numpy and squeeze the num_envs dimension."""
     def __init__(self, env):
         super().__init__(env)
-        # Always flatten the observation space regardless of current shape
         obs_space = env.observation_space
-        if hasattr(obs_space, 'low') and hasattr(obs_space, 'high'):
+        if hasattr(obs_space, 'shape') and len(obs_space.shape) == 2 and obs_space.shape[0] == 1:
+            # Squeeze (1, obs_dim) -> (obs_dim,)
             self.observation_space = gym.spaces.Box(
-                low=obs_space.low.flatten(),
-                high=obs_space.high.flatten(),
-                dtype=obs_space.dtype
-            )
+                low=obs_space.low.reshape(-1), high=obs_space.high.reshape(-1), dtype=obs_space.dtype)
         # Fix action space bounds if they are inf (ManiSkill may not set them to [-1,1])
         act_space = env.action_space
         if hasattr(act_space, 'low'):
@@ -136,8 +133,8 @@ class CPUNumpyWrapper(gym.ObservationWrapper):
     def observation(self, obs):
         if hasattr(obs, 'cpu'):
             obs = obs.cpu().numpy()
-        # Always flatten to 1D
-        obs = obs.flatten()
+        if obs.ndim == 2 and obs.shape[0] == 1:
+            obs = obs.squeeze(0)
         return np.asarray(obs, dtype=np.float32)
 
     def step(self, action):
@@ -362,11 +359,27 @@ def evaluate(n, agent, eval_envs, device):
     print('======= Evaluation Starts =========')
     result = defaultdict(list)
     obs, info = eval_envs.reset() # don't seed here
+
+    # DEBUG: Check observation and action shapes/values
+    print(f'[DEBUG] Initial obs shape: {obs.shape}, dtype: {obs.dtype}')
+    print(f'[DEBUG] Obs min/max: {obs.min():.3f}/{obs.max():.3f}')
+
+    step_count = 0
     while len(result['return']) < n:
         with torch.no_grad():
-            action = agent.get_eval_action(torch.Tensor(obs).to(device))
+            obs_tensor = torch.Tensor(obs).to(device)
+            action = agent.get_eval_action(obs_tensor)
+
+        # DEBUG: Log first action
+        if step_count == 0:
+            print(f'[DEBUG] Action shape: {action.shape}, dtype: {action.dtype}')
+            print(f'[DEBUG] Action min/max: {action.min():.3f}/{action.max():.3f}')
+            print(f'[DEBUG] First action sample: {action[0, 0].cpu().numpy()}')
+
         obs, rew, terminated, truncated, info = eval_envs.step(action.cpu().numpy())
         collect_episode_info(info, result)
+        step_count += 1
+
     print('======= Evaluation Ends =========')
     agent.train()
     return result
