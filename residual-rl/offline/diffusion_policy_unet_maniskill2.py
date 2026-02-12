@@ -534,16 +534,20 @@ if __name__ == "__main__":
         filtered_sd = {k: v for k, v in agent_sd.items() if k not in skip_keys}
         missing, unexpected = agent.load_state_dict(filtered_sd, strict=False)
         print(f'[INIT] Agent loaded. Missing: {missing}, Unexpected: {unexpected}')
-        # Load ema_agent weights too
+        # Load ema_agent weights — fall back to copying agent weights if shapes mismatch
+        ema_loaded = False
         if 'ema_agent' in ckpt:
-            ema_sd = ckpt['ema_agent']
-            filtered_ema_sd = {k: v for k, v in ema_sd.items() if k not in skip_keys}
-            missing_ema, unexpected_ema = ema_agent.load_state_dict(filtered_ema_sd, strict=False)
-            print(f'[INIT] EMA agent loaded. Missing: {missing_ema}, Unexpected: {unexpected_ema}')
-        else:
-            # Copy agent weights to ema_agent
+            try:
+                ema_sd = ckpt['ema_agent']
+                filtered_ema_sd = {k: v for k, v in ema_sd.items() if k not in skip_keys}
+                missing_ema, unexpected_ema = ema_agent.load_state_dict(filtered_ema_sd, strict=False)
+                print(f'[INIT] EMA agent loaded. Missing: {missing_ema}, Unexpected: {unexpected_ema}')
+                ema_loaded = True
+            except RuntimeError as e:
+                print(f'[INIT] EMA agent load failed (shape mismatch), copying agent weights instead: {e}')
+        if not ema_loaded:
             ema_agent.load_state_dict(agent.state_dict())
-            print('[INIT] No ema_agent in checkpoint, copied agent weights to ema_agent')
+            print('[INIT] Copied agent weights to ema_agent')
         # Re-init EMA from loaded agent weights
         ema = EMAModel(parameters=agent.parameters(), power=0.75)
         print('[INIT] Pretrained checkpoint loaded successfully!')
