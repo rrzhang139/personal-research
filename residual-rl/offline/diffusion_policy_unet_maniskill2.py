@@ -75,7 +75,7 @@ def parse_args():
     # Eval, logging, and others
     parser.add_argument("--output-dir", type=str, default='output')
     parser.add_argument("--log-freq", type=int, default=1000)
-    parser.add_argument("--eval-freq", type=int, default=10000)
+    parser.add_argument("--eval-freq", type=int, default=2000)  # Reduced for faster debugging
     parser.add_argument("--save-freq", type=int, default=100_000)
     parser.add_argument("--num-eval-episodes", type=int, default=100)
     parser.add_argument("--num-eval-envs", type=int, default=10) # NOTE: should not be too large, otherwise bias to short episodes
@@ -113,14 +113,17 @@ import envs.maniskill_fixed # register the environments for policy decorator
 from mani_skill.utils.wrappers.record import RecordEpisode
 
 class CPUNumpyWrapper(gym.ObservationWrapper):
-    """Convert ManiSkill3 torch tensor observations to numpy and squeeze the num_envs dimension."""
+    """Convert ManiSkill3 torch tensor observations to numpy and flatten to 1D."""
     def __init__(self, env):
         super().__init__(env)
+        # Always flatten the observation space regardless of current shape
         obs_space = env.observation_space
-        if hasattr(obs_space, 'shape') and len(obs_space.shape) == 2 and obs_space.shape[0] == 1:
-            # Squeeze (1, obs_dim) -> (obs_dim,)
+        if hasattr(obs_space, 'low') and hasattr(obs_space, 'high'):
             self.observation_space = gym.spaces.Box(
-                low=obs_space.low.reshape(-1), high=obs_space.high.reshape(-1), dtype=obs_space.dtype)
+                low=obs_space.low.flatten(),
+                high=obs_space.high.flatten(),
+                dtype=obs_space.dtype
+            )
         # Fix action space bounds if they are inf (ManiSkill may not set them to [-1,1])
         act_space = env.action_space
         if hasattr(act_space, 'low'):
@@ -133,8 +136,8 @@ class CPUNumpyWrapper(gym.ObservationWrapper):
     def observation(self, obs):
         if hasattr(obs, 'cpu'):
             obs = obs.cpu().numpy()
-        if obs.ndim == 2 and obs.shape[0] == 1:
-            obs = obs.squeeze(0)
+        # Always flatten to 1D
+        obs = obs.flatten()
         return np.asarray(obs, dtype=np.float32)
 
     def step(self, action):
