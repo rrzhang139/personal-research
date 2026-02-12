@@ -120,21 +120,39 @@ import envs.maniskill_fixed # register the environments for policy decorator
 from mani_skill.utils.wrappers.record import RecordEpisode
 gym.logger.set_level(gym.logger.DEBUG)
 
-class FlattenMS3ObsWrapper(gym.ObservationWrapper):
-    """Flatten ManiSkill3 observations from (1, obs_dim) to (obs_dim,)"""
-    def observation(self, obs):
-        return obs.flatten()
-
-    def _update_obs_space(self):
-        self.observation_space = gym.spaces.Box(
-            low=self.env.observation_space.low.flatten(),
-            high=self.env.observation_space.high.flatten(),
-            dtype=self.env.observation_space.dtype
-        )
-
+class CPUNumpyWrapper(gym.ObservationWrapper):
+    """Convert ManiSkill3 torch tensor observations to numpy and flatten (1, obs_dim) -> (obs_dim,)"""
     def __init__(self, env):
         super().__init__(env)
-        self._update_obs_space()
+        obs_space = env.observation_space
+        if hasattr(obs_space, 'shape') and len(obs_space.shape) == 2 and obs_space.shape[0] == 1:
+            self.observation_space = gym.spaces.Box(
+                low=obs_space.low.reshape(-1), high=obs_space.high.reshape(-1), dtype=obs_space.dtype)
+        # Fix action space bounds
+        act_space = env.action_space
+        if hasattr(act_space, 'low'):
+            low = act_space.low.reshape(-1) if hasattr(act_space.low, 'reshape') else act_space.low
+            high = act_space.high.reshape(-1) if hasattr(act_space.high, 'reshape') else act_space.high
+            if hasattr(low, 'cpu'):
+                low, high = low.cpu().numpy(), high.cpu().numpy()
+            self.action_space = gym.spaces.Box(low=low, high=high, dtype=np.float32)
+
+    def observation(self, obs):
+        if hasattr(obs, 'cpu'):
+            obs = obs.cpu().numpy()
+        if obs.ndim == 2 and obs.shape[0] == 1:
+            obs = obs.squeeze(0)
+        return np.asarray(obs, dtype=np.float32)
+
+    def step(self, action):
+        obs, rew, terminated, truncated, info = self.env.step(action)
+        if hasattr(rew, 'item'):
+            rew = rew.item()
+        if hasattr(terminated, 'item'):
+            terminated = terminated.item()
+        if hasattr(truncated, 'item'):
+            truncated = truncated.item()
+        return self.observation(obs), float(rew), bool(terminated), bool(truncated), info
 
 class SeqActionWrapper(gym.Wrapper):
     def step(self, action_seq):
@@ -153,9 +171,9 @@ def make_env(env_id, seed, control_mode=None, video_dir=None, other_kwargs={}):
                         render_mode='cameras' if video_dir else None, **env_kwargs)
         if video_dir:
             env = RecordEpisode(env, output_dir=video_dir, save_trajectory=False, info_on_video=True)
+        env = CPUNumpyWrapper(env)  # Convert ManiSkill3 torch tensors to numpy + flatten
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
-        env = FlattenMS3ObsWrapper(env)  # Flatten (1, obs_dim) -> (obs_dim) for ManiSkill3
         env = gym.wrappers.FrameStack(env, other_kwargs['obs_horizon'])
         env = SeqActionWrapper(env)
 
