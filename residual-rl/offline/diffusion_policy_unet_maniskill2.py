@@ -449,6 +449,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
+    print('[INIT] Creating evaluation environments...')
     VecEnv = gym.vector.SyncVectorEnv if args.sync_venv or args.num_eval_envs == 1 \
         else lambda x: gym.vector.AsyncVectorEnv(x, context='forkserver')
     eval_envs = VecEnv(
@@ -457,12 +458,16 @@ if __name__ == "__main__":
                 other_kwargs=args.__dict__)
         for i in range(args.num_eval_envs)]
     )
+    print('[INIT] Resetting evaluation environments...')
     eval_envs.reset(seed=args.seed+1000) # seed eval_envs here, and no more seeding during evaluation
+    print('[INIT] Evaluation environments ready')
     envs = eval_envs
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     # dataloader setup
+    print('[INIT] Loading demo dataset...')
     dataset = SmallDemoDataset_DiffusionPolicy(args.demo_path, device, num_traj=args.num_demo_traj)
+    print(f'[INIT] Dataset loaded: {len(dataset)} samples')
     sampler = RandomSampler(dataset, replacement=False)
     batch_sampler = BatchSampler(sampler, batch_size=args.batch_size, drop_last=True)
     batch_sampler = IterationBasedBatchSampler(batch_sampler, args.total_iters)
@@ -474,11 +479,14 @@ if __name__ == "__main__":
     )
 
     # agent setup
+    print('[INIT] Creating agent...')
     agent = Agent(envs, args).to(device)
-    optimizer = optim.AdamW(params=agent.parameters(), 
+    print('[INIT] Creating optimizer...')
+    optimizer = optim.AdamW(params=agent.parameters(),
         lr=args.lr, betas=(0.95, 0.999), weight_decay=1e-6)
 
     # Cosine LR schedule with linear warmup
+    print('[INIT] Creating LR scheduler...')
     lr_scheduler = get_scheduler(
         name='cosine',
         optimizer=optimizer,
@@ -489,13 +497,17 @@ if __name__ == "__main__":
     # Exponential Moving Average
     # accelerates training and improves stability
     # holds a copy of the model weights
+    print('[INIT] Creating EMA model...')
     ema = EMAModel(parameters=agent.parameters(), power=0.75)
     ema_agent = Agent(envs, args).to(device)
 
+    print('[INIT] Initialization complete!')
+    print('=' * 70)
 
     # ---------------------------------------------------------------------------- #
     # Training begins.
     # ---------------------------------------------------------------------------- #
+    print('Training starts...')
     agent.train()
     best_success_rate = -1
 
