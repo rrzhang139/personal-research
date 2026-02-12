@@ -184,7 +184,15 @@ class SmallDemoDataset_DiffusionPolicy(Dataset): # Load everything into GPU memo
         trajectories = load_demo_dataset(data_path, num_traj=num_traj, concat=False)
         # trajectories['observations'] is a list of np.ndarray (L+1, obs_dim)
         # trajectories['actions'] is a list of np.ndarray (L, act_dim)
-        
+
+        # Compute action statistics for normalization
+        all_actions = np.concatenate(trajectories['actions'], axis=0)
+        self.action_mean = torch.Tensor(all_actions.mean(axis=0)).to(device)
+        self.action_std = torch.Tensor(all_actions.std(axis=0)).to(device)
+        self.action_std = torch.clamp(self.action_std, min=1e-6)  # avoid division by zero
+        print(f'[ACTION STATS] mean: {self.action_mean.cpu().numpy()}')
+        print(f'[ACTION STATS] std: {self.action_std.cpu().numpy()}')
+
         for k, v in trajectories.items():
             for i in range(len(v)):
                 trajectories[k][i] = torch.Tensor(v[i]).to(device)
@@ -238,6 +246,10 @@ class SmallDemoDataset_DiffusionPolicy(Dataset): # Load everything into GPU memo
             act_seq = torch.cat([act_seq, pad_action.repeat(end-L, 1)], dim=0)
             # making the robot (arm and gripper) stay still
         assert obs_seq.shape[0] == self.obs_horizon and act_seq.shape[0] == self.pred_horizon
+
+        # Normalize actions
+        act_seq = (act_seq - self.action_mean) / self.action_std
+
         return {
             'observations': obs_seq,
             'actions': act_seq,
@@ -248,7 +260,7 @@ class SmallDemoDataset_DiffusionPolicy(Dataset): # Load everything into GPU memo
 
 
 class Agent(nn.Module):
-    def __init__(self, env, args):
+    def __init__(self, env, args, action_mean=None, action_std=None):
         super().__init__()
         self.obs_horizon = args.obs_horizon
         self.act_horizon = args.act_horizon
@@ -258,6 +270,10 @@ class Agent(nn.Module):
         assert (env.single_action_space.high == 1).all() and (env.single_action_space.low == -1).all()
         # denoising results will be clipped to [-1,1], so the action should be in [-1,1] as well
         self.act_dim = env.single_action_space.shape[0]
+
+        # Action normalization stats
+        self.register_buffer('action_mean', action_mean if action_mean is not None else torch.zeros(self.act_dim))
+        self.register_buffer('action_std', action_std if action_std is not None else torch.ones(self.act_dim))
 
         self.noise_pred_net = ConditionalUnet1D(
             input_dim=self.act_dim, # act_horizon is not used (U-Net doesn't care)
@@ -338,7 +354,12 @@ class Agent(nn.Module):
         # only take act_horizon number of actions
         start = self.obs_horizon - 1
         end = start + self.act_horizon
-        return noisy_action_seq[:, start:end] # (B, act_horizon, act_dim)
+        action_seq = noisy_action_seq[:, start:end] # (B, act_horizon, act_dim)
+
+        # Denormalize actions
+        action_seq = action_seq * self.action_std + self.action_mean
+
+        return action_seq
 
 def collect_episode_info(infos, result=None):
     if result is None:
@@ -480,7 +501,7 @@ if __name__ == "__main__":
 
     # agent setup
     print('[INIT] Creating agent...')
-    agent = Agent(envs, args).to(device)
+    agent = Agent(envs, args, action_mean=dataset.action_mean, action_std=dataset.action_std).to(device)
     print('[INIT] Creating optimizer...')
     optimizer = optim.AdamW(params=agent.parameters(),
         lr=args.lr, betas=(0.95, 0.999), weight_decay=1e-6)
@@ -499,7 +520,7 @@ if __name__ == "__main__":
     # holds a copy of the model weights
     print('[INIT] Creating EMA model...')
     ema = EMAModel(parameters=agent.parameters(), power=0.75)
-    ema_agent = Agent(envs, args).to(device)
+    ema_agent = Agent(envs, args, action_mean=dataset.action_mean, action_std=dataset.action_std).to(device)
 
     print('[INIT] Initialization complete!')
     print('=' * 70)
