@@ -363,22 +363,40 @@ def evaluate(n, agent, eval_envs, device):
     # DEBUG: Check observation and action shapes/values
     print(f'[DEBUG] Initial obs shape: {obs.shape}, dtype: {obs.dtype}')
     print(f'[DEBUG] Obs min/max: {obs.min():.3f}/{obs.max():.3f}')
+    print(f'[DEBUG] First obs sample (first 10 dims): {obs[0, :, :10].flatten() if obs.ndim == 3 else obs[0, :10]}')
 
     step_count = 0
+    action_stats = []
     while len(result['return']) < n:
         with torch.no_grad():
             obs_tensor = torch.Tensor(obs).to(device)
             action = agent.get_eval_action(obs_tensor)
 
-        # DEBUG: Log first action
-        if step_count == 0:
-            print(f'[DEBUG] Action shape: {action.shape}, dtype: {action.dtype}')
-            print(f'[DEBUG] Action min/max: {action.min():.3f}/{action.max():.3f}')
-            print(f'[DEBUG] First action sample: {action[0, 0].cpu().numpy()}')
+        # DEBUG: Log first few actions
+        if step_count < 3:
+            print(f'[DEBUG] Step {step_count} - Action shape: {action.shape}')
+            print(f'[DEBUG] Step {step_count} - Action[0, 0]: {action[0, 0].cpu().numpy()}')
+            print(f'[DEBUG] Step {step_count} - Action min/max: {action.min():.4f}/{action.max():.4f}')
+            print(f'[DEBUG] Step {step_count} - Action std: {action.std():.4f}')
+
+        # Collect stats
+        action_stats.append({
+            'mean': action.abs().mean().item(),
+            'max': action.abs().max().item()
+        })
 
         obs, rew, terminated, truncated, info = eval_envs.step(action.cpu().numpy())
         collect_episode_info(info, result)
         step_count += 1
+
+    # Print action statistics
+    if len(action_stats) > 0:
+        avg_abs_mean = sum(s['mean'] for s in action_stats) / len(action_stats)
+        avg_abs_max = sum(s['max'] for s in action_stats) / len(action_stats)
+        print(f'[DEBUG] Average |action| mean across all steps: {avg_abs_mean:.4f}')
+        print(f'[DEBUG] Average |action| max across all steps: {avg_abs_max:.4f}')
+        if avg_abs_mean < 0.01:
+            print(f'[DEBUG] ⚠️  WARNING: Actions are very small! Model may be predicting near-zero.')
 
     print('======= Evaluation Ends =========')
     agent.train()
