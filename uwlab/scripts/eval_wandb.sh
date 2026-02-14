@@ -8,14 +8,14 @@
 # Examples:
 #   bash scripts/eval_wandb.sh /workspace/checkpoints/cube_state_rl_expert.pt pretrained
 #   bash scripts/eval_wandb.sh logs/rsl_rl/.../model_400.pt 4reset_iter400
-set -e
-
 CHECKPOINT="${1:?Usage: eval_wandb.sh <checkpoint_path> [run_name]}"
 RUN_NAME="${2:-eval}"
 
+# NOTE: Do NOT use set -e here. .bashrc_pod sources a legacy venv that may not exist.
 source /workspace/.bashrc_pod 2>/dev/null
 cd /workspace/code/personal-research/uwlab
 source .venv/bin/activate
+set -e  # Safe to enable after sourcing
 export ISAACSIM_ACCEPT_EULA=Y
 export OMNI_KIT_ACCEPT_EULA=Y
 export WANDB_PROJECT=omnireset
