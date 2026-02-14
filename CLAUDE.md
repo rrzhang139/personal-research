@@ -135,7 +135,8 @@ SSHEOF
 ssh -tt -i ~/.ssh/runpod SSH_ADDRESS << 'SSHEOF'
 source /workspace/.bashrc_pod 2>/dev/null
 proj residual-rl
-tmux new-session -d -s train 'python offline/diffusion_policy_unet_maniskill2.py --env-id StackCube-v1 > /workspace/results/train.log 2>&1'
+# IMPORTANT: tmux command must source .bashrc_pod to get env vars (WANDB_API_KEY, etc.)
+tmux new-session -d -s train 'source /workspace/.bashrc_pod && proj residual-rl && python offline/diffusion_policy_unet_maniskill2.py --env-id StackCube-v1 > /workspace/results/train.log 2>&1'
 echo "TMUX_STARTED"
 exit
 SSHEOF
@@ -168,6 +169,34 @@ SSHEOF
 - **Save results to /workspace/results/** with descriptive names
 - **Commit code frequently** to `/workspace/code/personal-research/`
 - **Always export `HDF5_USE_FILE_LOCKING=FALSE`** — RunPod's NFS-backed `/workspace/` volume doesn't support h5py file locking; without this, any HDF5 read/write will fail with `BlockingIOError: Unable to lock file`
+
+### CRITICAL: Environment Variables in Tmux
+**Tmux creates a new shell that does NOT inherit environment variables from the parent shell.**
+
+This means variables like `WANDB_API_KEY`, `HF_TOKEN`, `GITHUB_TOKEN` from `/workspace/.env` will be MISSING unless explicitly sourced.
+
+**Always source the environment inside tmux sessions:**
+```bash
+# When starting a new tmux session:
+tmux new -s exp
+source /workspace/.bashrc_pod  # This loads /workspace/.env
+proj residual-rl               # This activates the venv
+
+# Or start tmux with environment pre-loaded:
+tmux new -s exp "bash --init-file <(echo 'source /workspace/.bashrc_pod; proj residual-rl; exec bash')"
+
+# When attaching to existing tmux session, verify env is loaded:
+tmux attach -t exp
+echo $WANDB_API_KEY  # Should not be empty!
+# If empty, run: source /workspace/.bashrc_pod
+```
+
+**Symptoms of missing environment:**
+- `wandb: ERROR API key not configured` despite having `.env` file
+- HuggingFace downloads fail with authentication errors
+- Git push fails with authentication errors
+
+**Fix:** Always run `source /workspace/.bashrc_pod` as the first command inside every new tmux session.
 
 ## Memory Note
 After a fresh pod restart, `free -h` may show ~76GB "used" out of 124GB. This is normal:
