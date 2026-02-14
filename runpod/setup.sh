@@ -2,7 +2,7 @@
 # setup.sh — FIRST TIME ONLY on a brand new pod
 # Installs system-level tools and auth only. Project deps are installed per-project.
 # EVERYTHING lives in /workspace/ — container disk is only 5GB, not enough for anything
-set -e
+# NOTE: Do NOT use set -e — .bashrc_pod sources legacy paths that may not exist.
 
 echo "=== First-Time Pod Setup ==="
 
@@ -12,7 +12,7 @@ if [ ! -f /workspace/.env ]; then
     echo "Create it with: cat > /workspace/.env << 'EOF' ... EOF"
     exit 1
 fi
-source /workspace/.env
+set -a; source /workspace/.env; set +a
 
 # ---- Redirect ALL caches to /workspace (container disk is only 5GB) ----
 export UV_CACHE_DIR=/workspace/.cache/uv
@@ -27,7 +27,7 @@ echo "--- Installing system packages ---"
 apt-get update -qq && apt-get install -qq -y \
     vim htop tree wget curl git tmux \
     build-essential cmake \
-    libgl1-mesa-glx libegl1-mesa libglib2.0-0 \
+    libgl1-mesa-glx libegl1-mesa libglib2.0-0 libglu1-mesa \
     > /dev/null 2>&1
 
 # ---- Node.js (needed for Claude Code npm install) ----
@@ -69,18 +69,26 @@ ln -sf /workspace/.netrc /root/.netrc
 
 # ---- Persist env vars for all future sessions ----
 cat > /workspace/.bashrc_pod << 'ENVEOF'
-source /workspace/.env 2>/dev/null
+# Export all vars from .env (set -a auto-exports, needed for Python/wandb/HF)
+set -a; source /workspace/.env 2>/dev/null; set +a
 export PATH="/workspace/.local/bin:$PATH"
 export UV_CACHE_DIR=/workspace/.cache/uv
 export PIP_CACHE_DIR=/workspace/.cache/pip
 export XDG_CACHE_HOME=/workspace/.cache
 export HF_HOME=/workspace/.cache/huggingface
 export WANDB_DIR=/workspace
+export HDF5_USE_FILE_LOCKING=FALSE
 git config --global credential.helper "store --file=/workspace/.git-credentials"
 git config --global user.name "${GIT_NAME}"
 git config --global user.email "${GIT_EMAIL}"
 ln -sfn /workspace/.claude ~/.claude
 ln -sf /workspace/.netrc ~/.netrc
+
+# Redirect container caches to volume (survives restart)
+mkdir -p /workspace/.cache/{ov,pip,wandb}
+ln -sfn /workspace/.cache/ov /root/.cache/ov 2>/dev/null
+ln -sfn /workspace/.cache/pip /root/.cache/pip 2>/dev/null
+ln -sfn /workspace/.cache/wandb /root/.cache/wandb 2>/dev/null
 
 # Helper: activate a project env
 proj() {

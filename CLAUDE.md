@@ -76,6 +76,22 @@ source /workspace/code/personal-research/residual-rl/.venv/bin/activate
 | `runpod/save.sh` | **BEFORE TERMINATE ONLY** — git push + wandb sync |
 | `<project>/setup_env.sh` | **FIRST TIME PER PROJECT** — creates .venv, installs deps |
 
+## Container Disk vs Volume
+The container disk (`/`, 2GB) is wiped on every pod stop/restart. Only these items need reinstalling:
+
+| Item | Why can't persist | Reinstall method |
+|------|-------------------|------------------|
+| `tmux` | apt package with system libs | `apt-get install -y tmux` |
+| `libglu1-mesa` | system shared lib for Isaac Sim rendering | `apt-get install -y libglu1-mesa` |
+| `libgl1-mesa-glx`, `libegl1-mesa` | system OpenGL libs | `apt-get install -y ...` |
+| `build-essential`, `cmake` | compilers/build tools | `apt-get install -y ...` |
+| `dev` user | `/etc/passwd` on container disk | `useradd -m -s /bin/bash dev` |
+
+Everything else (uv, claude, Python venvs, caches, code, checkpoints) lives on `/workspace/`.
+`restart.sh` handles all of the above automatically (~30s).
+
+Cache symlinks (`/root/.cache/ov → /workspace/.cache/ov`, etc.) are set up by `.bashrc_pod` to avoid 471MB Omniverse cache rebuilding on each restart.
+
 ## Pod Lifecycle
 - **Stop pod**: `/workspace/` survives (project venvs, packages, models, code all intact). Run `restart.sh` on next start (~1 min). ~$5/month idle.
 - **Terminate pod**: Everything wiped. Run `save.sh` first, then `setup.sh` + project `setup_env.sh` on new pod.
