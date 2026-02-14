@@ -212,6 +212,20 @@ After a fresh pod restart, `free -h` may show ~76GB "used" out of 124GB. This is
 ### SSH Address
 Current RunPod SSH: `2djfma2zu7g1oh-644112fd@ssh.runpod.io`
 
+## File Transfer (RunPod ↔ Local)
+RunPod's SSH gateway blocks `scp`, `rsync`, and port forwarding. Use `runpodctl send/receive` instead:
+
+```bash
+# On the pod: send a file (outputs a receive code)
+runpodctl send /workspace/path/to/file.mp4
+
+# On local machine: receive using the code
+runpodctl receive <code>   # e.g. runpodctl receive 6641-logo-hilton-diego-3
+```
+
+Install locally: `brew install runpod/runpodctl/runpodctl`
+Already installed on pods at `/usr/bin/runpodctl`.
+
 ## Common Commands
 ```bash
 # Source env (always first)
