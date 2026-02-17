@@ -226,7 +226,46 @@ After a fresh pod restart, `free -h` may show ~76GB "used" out of 124GB. This is
 - Check GPU: `nvidia-smi`
 
 ### SSH Address
-Current RunPod SSH: `2djfma2zu7g1oh-644112fd@ssh.runpod.io`
+Current RunPod SSH: `1wlyxqrt37safq-64411e63@ssh.runpod.io`
+Current Pod ID: `1wlyxqrt37safq` (4x RTX 4090, uwlab-4x4090-v3)
+Old Pod (EXITED): `2djfma2zu7g1oh` (1x RTX 4090)
+
+### RunPod API Management
+API key stored in `~/.runpod/config.toml`. Manage pods programmatically:
+```bash
+RUNPOD_API_KEY="$(grep apikey ~/.runpod/config.toml | cut -d'"' -f2)"
+
+# List pods
+curl -s -H "Content-Type: application/json" -d '{"query":"query { myself { pods { id name desiredStatus gpuCount } } }"}' "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY"
+
+# Stop a pod
+curl -s -H "Content-Type: application/json" -d '{"query":"mutation { podStop(input: {podId: \"POD_ID\"}) { id desiredStatus } }"}' "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY"
+
+# Resume a stopped pod
+curl -s -H "Content-Type: application/json" -d '{"query":"mutation { podResume(input: {podId: \"POD_ID\", gpuCount: 4}) { id desiredStatus } }"}' "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY"
+
+# Create new pod
+curl -s -H "Content-Type: application/json" -d '{"query":"mutation { podFindAndDeployOnDemand(input: { name: \"my-pod\", gpuTypeId: \"NVIDIA GeForce RTX 4090\", gpuCount: 4, cloudType: ALL, volumeInGb: 100, containerDiskInGb: 20, imageName: \"runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04\", volumeMountPath: \"/workspace\", ports: \"22/tcp,8888/http\" }) { id desiredStatus } }"}' "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY"
+
+# Terminate (destroys volume!)
+curl -s -H "Content-Type: application/json" -d '{"query":"mutation { podTerminate(input: {podId: \"POD_ID\"}) }"}' "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY"
+
+# Get SSH command
+runpodctl ssh connect POD_ID
+```
+
+**CRITICAL RunPod API notes:**
+- Cannot change GPU count on existing pod — must create new
+- `podResume` fails with "not enough free GPUs" if host machine is full — create new pod instead
+- Pod volumes are pod-local (NOT network volumes) — cannot be shared between pods
+- New pods start with empty `/workspace/` — must run full setup (setup.sh + project setup_env.sh)
+
+### SSH Gateway Gotchas
+- SSH suffix (e.g., `-64411e63`) is **per-pod and unique** — get from RunPod dashboard, not derivable from API
+- RunPod SSH gateway (`ssh.runpod.io`) **ignores command arguments** — must use heredoc to send commands
+- The `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` image already has tmux, git, Python — no need to apt-get install them
+- New pod SSH may take 1-3 minutes to become reachable after creation
+- If a pod's SSH port stays closed for >5 min, the pod is likely stuck — terminate and create new
 
 ## File Transfer (RunPod ↔ Local)
 RunPod's SSH gateway blocks `scp`, `rsync`, and port forwarding. Use `runpodctl send/receive` instead:
