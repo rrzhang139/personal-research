@@ -90,6 +90,23 @@ cd /workspace/code/personal-research/uwlab/UWLab
 | `OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-NearGoal-v0` | 2 near-goal resets | Training (near-goal) |
 | `OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-Play-v0` | ObjectAnywhereEEAnywhere only | Evaluation |
 
+### Timing Reference (for sleep/wait durations)
+| Operation | Time | Notes |
+|-----------|------|-------|
+| Isaac Sim init (first launch) | ~3 min | Extensions download, scene creation |
+| Isaac Sim init (cached) | ~2 min | Scene creation only |
+| Eval rollout (200 steps, 1 env) | ~2 min | After init, includes video recording |
+| Eval total (init + rollout + wandb upload) | ~5 min | End-to-end |
+| Training first iteration | ~3 min after init | Isaac Sim init + first PPO update |
+| Training per iteration (4096 envs) | ~15s | Steady state |
+| Training total (40k iters) | ~4 hours | Single RTX 4090 |
+| wandb upload (video) | ~10s | After rollout completes |
+
+**Recommended sleep times when checking:**
+- After launching training: `sleep 180` (3 min) to verify first iteration
+- After launching eval: `sleep 180` (3 min) for first check, `sleep 120` (2 min) for second if still running
+- After launching Isaac Sim import test: `sleep 60` (1 min)
+
 ### Eval with Video Recording
 - `play.py` has built-in `--video` flag using `gym.wrappers.RecordVideo`
 - Videos saved to `logs/<task>/<date>/videos/play/`
