@@ -63,5 +63,5 @@ IMPORTANT:
 - If finetuning, add BOTH `--checkpoint <path> --resume` flags
 - Without `--resume`, checkpoint is ignored and training starts from scratch
 - wandb logs to project `isaaclab` by default (rsl_rl hardcoded), not `omnireset`
-- SSH address is in root CLAUDE.md under `SSH Address`
+- SSH address is in providers/runpod.md under `Current Instance`
 - Do NOT use `set -e` in training commands sourcing `.bashrc_pod`

@@ -36,4 +36,4 @@ SSHEOF
 
 Report a concise summary: GPU usage, active jobs, training progress (iteration/ETA), wandb URLs, disk space.
 
-SSH address is in root CLAUDE.md under `SSH Address`.
+SSH address is in providers/runpod.md under `Current Instance`.

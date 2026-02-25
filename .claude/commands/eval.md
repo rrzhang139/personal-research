@@ -56,4 +56,4 @@ SSHEOF
 IMPORTANT:
 - Eval takes ~3-5 minutes total (2 min Isaac Sim init + 1 min rollout + upload)
 - GPU must be free (can't run eval while training)
-- SSH address is in root CLAUDE.md under `SSH Address`
+- SSH address is in providers/runpod.md under `Current Instance`

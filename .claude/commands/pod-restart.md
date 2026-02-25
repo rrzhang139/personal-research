@@ -1,6 +1,6 @@
 Pod has been restarted (stopped then started again). The persistent volume `/workspace/` survives but container packages (tmux, libglu, etc.) are wiped.
 
-SSH address: check CLAUDE.md for `SSH Address` field (under root CLAUDE.md), it may have changed if this is a new pod.
+SSH address: check providers/runpod.md for `Current Instance` section, it may have changed if this is a new pod.
 
 Steps to recover:
 1. SSH into the pod and run `restart.sh`:

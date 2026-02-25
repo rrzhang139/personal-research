@@ -1,6 +1,6 @@
 Brand new pod setup from scratch. The user has created a fresh RunPod instance and needs everything installed.
 
-IMPORTANT: Get the new SSH address from the user first if not provided. Update the SSH Address in the root CLAUDE.md.
+IMPORTANT: Get the new SSH address from the user first if not provided. Update the SSH Address in providers/runpod.md AND the Active Instances table in CLAUDE.md.
 
 Steps:
 1. SSH in and run the system-level setup:
@@ -69,4 +69,4 @@ SSHEOF
 IMPORTANT:
 - Isaac Sim install is ~12GB and takes ~10 min with uv. MUST run in tmux.
 - Ensure `.bashrc_pod` has `set -a; source /workspace/.env 2>/dev/null; set +a` (not just `source`)
-- Update SSH address in root CLAUDE.md after setup
+- Update SSH address in providers/runpod.md AND Active Instances table in CLAUDE.md after setup
