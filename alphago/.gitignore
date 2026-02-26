@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+experiments/
+!experiments/.gitkeep
+*.pt
+*.pth
+wandb/
+.DS_Store
