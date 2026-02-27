@@ -15,9 +15,9 @@
 **Cost awareness**: A 4x RTX 4090 pod costs ~$1.36-1.92/hr. That's $32-46/day if left running. **Always stop pods when not actively training.**
 
 ## Current Instance
-- **Pod ID**: `1wlyxqrt37safq` (uwlab-4x4090-v3)
+- **Pod ID**: `4n8e4qprui8ypr` (uwlab-4x4090-adaptive)
 - **GPUs**: 4x RTX 4090
-- **SSH**: `1wlyxqrt37safq-64411e63@ssh.runpod.io`
+- **SSH**: `4n8e4qprui8ypr-64411cfb@ssh.runpod.io`
 - **SSH Key**: `~/.ssh/runpod`
 - **Old Pod (EXITED)**: `2djfma2zu7g1oh` (1x RTX 4090)
 

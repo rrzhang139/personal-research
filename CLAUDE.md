@@ -76,6 +76,7 @@ These conventions apply regardless of which provider you use:
 
 - **Persistent volume**: All work lives on the persistent disk (e.g., `/workspace/` on RunPod, home dir on Codespaces)
 - **Environment variables**: Auth tokens (HF_TOKEN, WANDB_API_KEY, GITHUB_TOKEN) stored in `.env` file on the remote machine
+- **Local .env template**: `runpod/.env` in this repo (NOT committed to git — in .gitignore). Contains all tokens needed for pod setup. Uploaded to `/workspace/.env` during pod creation.
 - **Always source env first**: `source /workspace/.bashrc_pod` (or equivalent) before any command
 - **Tmux for long-running jobs**: Always use detached tmux for training/eval. Tmux does NOT inherit parent env vars — source `.bashrc_pod` inside the tmux session.
 - **HDF5_USE_FILE_LOCKING=FALSE**: Required on NFS-backed volumes (RunPod, some Vast.ai hosts)
@@ -132,4 +133,4 @@ Track your currently active instances here. Update when creating/destroying inst
 
 | Provider | Instance ID | GPUs | SSH Address | Status |
 |----------|-------------|------|-------------|--------|
-| RunPod | `1wlyxqrt37safq` | 4x RTX 4090 | `1wlyxqrt37safq-64411e63@ssh.runpod.io` | Active |
+| RunPod | `4n8e4qprui8ypr` | 4x RTX 4090 | `4n8e4qprui8ypr-64411cfb@ssh.runpod.io` | Active |
