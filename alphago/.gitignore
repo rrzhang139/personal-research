@@ -8,5 +8,7 @@ experiments/
 !experiments/.gitkeep
 *.pt
 *.pth
+!baselines/**/*.pt
+checkpoints/
 wandb/
 .DS_Store

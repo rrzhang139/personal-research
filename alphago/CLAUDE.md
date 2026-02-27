@@ -303,6 +303,26 @@ Track of features implemented and improvements measured. Each entry records the 
 |------|---------|----------|--------|-------|
 | 2026-02-26 | **Initial testbed** — full AlphaZero pipeline on tic-tac-toe (MCTS + PUCT, MLP dual-head net, self-play → train → arena loop, config system, CLI, `/experiment` command) | Random play | 97% win rate vs random after 25 iters (3 min CPU). 38 tests pass. | All core components: game engine, MCTS search, neural net, training pipeline, arena eval |
 | 2026-02-26 | **Logging & diagnostics** — compact table output with config diff from defaults, MCTS diagnostics (policy entropy, root value, search depth), 6-panel training plots, W&B integration with grouped metrics | Verbose per-stage print statements | H(pi) drops 1.47→1.0, search depth increases 1.9→3.1 over training. Plots auto-saved. history.json for offline analysis. | Metrics: loss/{total,policy,value}, eval/{vs_random,arena}, mcts/{entropy,root_value,depth}, self_play/{outcomes,game_length} |
+| 2026-02-27 | **num_simulations sweep** — experiment sweeping sims=[1,5,10,25,50,100] on tic-tac-toe | Default 25 sims | 1 sim: 61% (broken). 5 sims: 90% (biggest jump). 10-25: 95% (knee). 50-100: 99% (diminishing returns). 1-sim loss is lowest (0.53) but plays worst — soft policy targets from more sims are harder to fit but far better training signal. | `experiments/20260227_num_sims_sweep/` |
+| 2026-02-27 | **Connect Four** — game engine (6x7, gravity, 4-in-a-row check, left-right mirror symmetry) + baseline training | Random play | 100% vs random in 7.8m (50 sims, 25 iters). Search depth 5.6 (vs 4.4 for ttt). Arena stays competitive throughout (harder game). 56 tests pass. | `games/connect4.py`, 18 new tests |
+| 2026-02-27 | **Baselines system** — reproducible reference models per game with consistent params (50 sims, 4x128 MLP, 25 iters) for cross-game comparison. Checkpoints + history stored. | — | TTT: 95-100% vs random (3.5m). C4: 100% vs random (7.8m). | `baselines/` with README, see `ROADMAP.md` for progression plan |
+
+## Baselines
+
+Reference models with consistent params for cross-game comparison. See `baselines/README.md` for full details.
+
+```
+baselines/<game>/best.pt           # weights
+baselines/<game>/history.json      # metrics
+baselines/<game>/training_curves.png
+```
+
+Shared config: 4x128 MLP, 50 sims, c_puct=1.0, lr=0.001, 25 iters, 100 games/iter.
+
+| Game | vs Random | Time | Key Observation |
+|------|-----------|------|-----------------|
+| Tic-Tac-Toe | 95-100% | 3.5m | Converges iter 1. Arena = all draws. Game is "solved". |
+| Connect Four | 100% | 7.8m | Takes ~6 iters. Arena stays competitive. Deeper search (5.6 vs 4.4). |
 
 ### Key Papers
 - Coulom 2006 — [Efficient Selectivity and Backup Operators in MCTS](https://hal.science/hal-00116992/) — coined MCTS
