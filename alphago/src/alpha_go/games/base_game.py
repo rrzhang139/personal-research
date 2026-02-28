@@ -30,12 +30,24 @@ class Game(ABC):
         """Apply action by player, return the new state."""
 
     @abstractmethod
-    def get_valid_moves(self, state: np.ndarray) -> np.ndarray:
-        """Return binary mask of valid actions (1 = legal, 0 = illegal)."""
+    def get_valid_moves(self, state: np.ndarray, player: int = 1) -> np.ndarray:
+        """Return binary mask of valid actions (1 = legal, 0 = illegal).
+
+        Args:
+            state: Current board state.
+            player: Player whose turn it is (1 or -1). Most games ignore this
+                    since legal moves are player-independent, but Othello needs it.
+        """
 
     @abstractmethod
-    def check_terminal(self, state: np.ndarray, action: int) -> tuple[bool, float]:
+    def check_terminal(self, state: np.ndarray, action: int, player: int = 1) -> tuple[bool, float]:
         """Check if the game is over after the given action was played.
+
+        Args:
+            state: Board state after the action was applied.
+            action: The action that was just played.
+            player: The player who just moved (1 or -1). Most games infer this
+                    from state[action], but Othello needs it for pass moves.
 
         Returns:
             (is_terminal, value): value is 1 if the player who just moved won,
@@ -45,6 +57,10 @@ class Game(ABC):
     @abstractmethod
     def get_board_size(self) -> int:
         """Return the size of the state representation (flat)."""
+
+    @abstractmethod
+    def get_board_shape(self) -> tuple[int, int]:
+        """Return the 2D board dimensions (rows, cols) for CNN reshaping."""
 
     @abstractmethod
     def get_action_size(self) -> int:

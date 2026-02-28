@@ -10,7 +10,7 @@ Usage:
 import argparse
 
 from alpha_go.games import get_game
-from alpha_go.neural_net.simple_net import SimpleNetWrapper
+from alpha_go.neural_net import create_model
 from alpha_go.training.pipeline import run_pipeline
 from alpha_go.utils.config import (
     AlphaZeroConfig,
@@ -22,39 +22,78 @@ from alpha_go.utils.config import (
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="AlphaZero Training")
+    parser = argparse.ArgumentParser(
+        description="AlphaZero Training",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""examples:
+  python scripts/train.py --game tictactoe
+  python scripts/train.py --game connect4 --num-simulations 50
+  python scripts/train.py --game tictactoe --lr 0.002 --num-iterations 10 --wandb""",
+    )
 
     # Game
-    parser.add_argument('--game', type=str, default='tictactoe', help='Game to train on')
-    parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    g = parser.add_argument_group('game')
+    g.add_argument('--game', type=str, default='tictactoe',
+                   help='Game to train on: tictactoe, connect4 (default: tictactoe)')
+    g.add_argument('--seed', type=int, default=42,
+                   help='Random seed for reproducibility (default: 42)')
 
     # MCTS
-    parser.add_argument('--num-simulations', type=int, default=25)
-    parser.add_argument('--c-puct', type=float, default=1.0)
-    parser.add_argument('--dirichlet-alpha', type=float, default=0.3)
-    parser.add_argument('--dirichlet-epsilon', type=float, default=0.25)
-    parser.add_argument('--temp-threshold', type=int, default=15)
+    m = parser.add_argument_group('mcts', 'Monte Carlo Tree Search parameters')
+    m.add_argument('--num-simulations', type=int, default=25,
+                   help='MCTS sims per move. More = stronger but slower. Knee ~10-25 for ttt, ~50 for connect4 (default: 25)')
+    m.add_argument('--c-puct', type=float, default=1.0,
+                   help='Exploration constant in PUCT. Higher = explore more, lower = exploit (default: 1.0)')
+    m.add_argument('--dirichlet-alpha', type=float, default=0.3,
+                   help='Dirichlet noise concentration. 0.3 for small action spaces, 0.03 for Go (default: 0.3)')
+    m.add_argument('--dirichlet-epsilon', type=float, default=0.25,
+                   help='Noise weight at root. 0 = no noise, 0.25 = AlphaZero default (default: 0.25)')
+    m.add_argument('--temp-threshold', type=int, default=15,
+                   help='Move number after which play becomes greedy. Higher = explore longer in each game (default: 15)')
 
     # Network
-    parser.add_argument('--hidden-size', type=int, default=128)
-    parser.add_argument('--num-layers', type=int, default=4)
+    n = parser.add_argument_group('network', 'Neural network architecture')
+    n.add_argument('--network', type=str, default='mlp', choices=['mlp', 'cnn'],
+                   help='Network type: mlp or cnn (default: mlp)')
+    n.add_argument('--hidden-size', type=int, default=128,
+                   help='Hidden layer width (MLP). 32 works for ttt, 128+ for harder games (default: 128)')
+    n.add_argument('--num-layers', type=int, default=4,
+                   help='Number of hidden layers (MLP). 2-4 for MLP (default: 4)')
+    n.add_argument('--num-filters', type=int, default=64,
+                   help='Number of conv filters (CNN). (default: 64)')
+    n.add_argument('--num-res-blocks', type=int, default=4,
+                   help='Number of residual blocks (CNN). (default: 4)')
 
     # Training
-    parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--batch-size', type=int, default=64)
-    parser.add_argument('--epochs-per-iteration', type=int, default=10)
-    parser.add_argument('--max-buffer-size', type=int, default=50000)
-    parser.add_argument('--num-iterations', type=int, default=25)
-    parser.add_argument('--games-per-iteration', type=int, default=100)
-    parser.add_argument('--checkpoint-dir', type=str, default='checkpoints')
+    t = parser.add_argument_group('training', 'Self-play and optimization')
+    t.add_argument('--lr', type=float, default=0.001,
+                   help='Adam learning rate (default: 0.001)')
+    t.add_argument('--batch-size', type=int, default=64,
+                   help='Minibatch size for training (default: 64)')
+    t.add_argument('--epochs-per-iteration', type=int, default=10,
+                   help='Training passes over replay buffer per iteration (default: 10)')
+    t.add_argument('--max-buffer-size', type=int, default=50000,
+                   help='Replay buffer capacity. Older examples dropped (default: 50000)')
+    t.add_argument('--num-iterations', type=int, default=25,
+                   help='Total self-play/train/arena cycles (default: 25)')
+    t.add_argument('--games-per-iteration', type=int, default=100,
+                   help='Self-play games generated per iteration (default: 100)')
+    t.add_argument('--checkpoint-dir', type=str, default='checkpoints',
+                   help='Directory for model checkpoints and plots (default: checkpoints)')
 
     # Arena
-    parser.add_argument('--arena-games', type=int, default=40)
-    parser.add_argument('--update-threshold', type=float, default=0.55)
+    a = parser.add_argument_group('arena', 'Model evaluation')
+    a.add_argument('--arena-games', type=int, default=40,
+                   help='Games played to compare new vs old model (default: 40)')
+    a.add_argument('--update-threshold', type=float, default=0.55,
+                   help='Win rate to accept new model. 0.55 = must win >55%% (default: 0.55)')
 
     # Logging
-    parser.add_argument('--wandb', action='store_true', help='Log to W&B')
-    parser.add_argument('--wandb-project', type=str, default='alphazero')
+    l = parser.add_argument_group('logging')
+    l.add_argument('--wandb', action='store_true',
+                   help='Enable Weights & Biases logging')
+    l.add_argument('--wandb-project', type=str, default='alphazero',
+                   help='W&B project name (default: alphazero)')
 
     return parser.parse_args()
 
@@ -71,8 +110,11 @@ def main():
             temp_threshold=args.temp_threshold,
         ),
         network=NetworkConfig(
+            network_type=args.network,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
+            num_filters=args.num_filters,
+            num_res_blocks=args.num_res_blocks,
         ),
         training=TrainingConfig(
             lr=args.lr,
@@ -95,12 +137,7 @@ def main():
 
     # Setup game and model
     game = get_game(config.game)
-    model = SimpleNetWrapper(
-        board_size=game.get_board_size(),
-        action_size=game.get_action_size(),
-        config=config.network,
-        lr=config.training.lr,
-    )
+    model = create_model(game, config.network, lr=config.training.lr)
 
     # Run — pipeline handles all logging
     history = run_pipeline(game, model, config)

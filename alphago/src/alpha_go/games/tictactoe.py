@@ -36,10 +36,10 @@ class TicTacToe(Game):
         new_state[action] = player
         return new_state
 
-    def get_valid_moves(self, state: np.ndarray) -> np.ndarray:
+    def get_valid_moves(self, state: np.ndarray, player: int = 1) -> np.ndarray:
         return (state == 0).astype(np.float32)
 
-    def check_terminal(self, state: np.ndarray, action: int) -> tuple[bool, float]:
+    def check_terminal(self, state: np.ndarray, action: int, player: int = 1) -> tuple[bool, float]:
         # Check if the player who placed at `action` won
         player = state[action]
         for line in self.WIN_LINES:
@@ -55,6 +55,9 @@ class TicTacToe(Game):
 
     def get_board_size(self) -> int:
         return 9
+
+    def get_board_shape(self) -> tuple[int, int]:
+        return (3, 3)
 
     def get_action_size(self) -> int:
         return 9

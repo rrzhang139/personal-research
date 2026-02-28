@@ -50,7 +50,7 @@ def play_arena_game(
         action = np.argmax(pi)
         state = game.get_next_state(state, action, player)
 
-        is_terminal, value = game.check_terminal(state, action)
+        is_terminal, value = game.check_terminal(state, action, player)
         if is_terminal:
             # value is from perspective of player who just moved
             if value == 0:
@@ -139,12 +139,12 @@ def play_vs_random(game: Game, model, mcts_config: MCTSConfig, num_games: int = 
                 pi, _ = mcts.search(state, player)
                 action = np.argmax(pi)
             else:
-                valid = game.get_valid_moves(state)
+                valid = game.get_valid_moves(state, player)
                 valid_actions = np.where(valid > 0)[0]
                 action = np.random.choice(valid_actions)
 
             state = game.get_next_state(state, action, player)
-            is_terminal, value = game.check_terminal(state, action)
+            is_terminal, value = game.check_terminal(state, action, player)
 
             if is_terminal:
                 if value == 0:

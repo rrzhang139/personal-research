@@ -63,7 +63,7 @@ class MCTSNode:
             game: Game instance for computing next states.
             action_priors: Policy vector from neural network (over all actions).
         """
-        valid_moves = game.get_valid_moves(self.state)
+        valid_moves = game.get_valid_moves(self.state, self.player)
         # Mask and renormalize priors to only legal moves
         action_priors = action_priors * valid_moves
         prior_sum = action_priors.sum()

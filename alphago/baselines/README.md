@@ -28,6 +28,7 @@ Seed:             42
 |------|-----------|----------------|------------|------|-------|
 | **Tic-Tac-Toe** | 95% | 100% | 1.20 | 3.5m | Converges iter 1. Arena = all draws after iter 1 (model is already strong). |
 | **Connect Four** | 100% | 100% | 1.87 | 7.8m | Takes ~6 iters to stabilize. Arena stays competitive throughout (harder game). |
+| **Othello (6x6)** | 60% | 74% | 2.07 | 16.7m | First game with pass moves and spatial patterns. MLP struggles — CNN likely needed. 5/25 models accepted. |
 
 ## How to Reproduce
 
@@ -37,6 +38,9 @@ python scripts/train.py --game tictactoe --num-simulations 50
 
 # Connect Four
 python scripts/train.py --game connect4 --num-simulations 50
+
+# Othello (6x6)
+python scripts/train.py --game othello --num-simulations 50
 ```
 
 ## How to Load a Baseline

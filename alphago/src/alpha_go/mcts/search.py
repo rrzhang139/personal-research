@@ -75,7 +75,7 @@ class MCTS:
             # Check if this leaf is terminal
             if node.parent is not None:
                 is_terminal, terminal_value = self.game.check_terminal(
-                    node.state, node.action
+                    node.state, node.action, node.parent.player
                 )
                 if is_terminal:
                     # terminal_value is from perspective of player who just moved

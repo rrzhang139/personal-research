@@ -37,11 +37,20 @@ class MCTSConfig:
 class NetworkConfig:
     """Neural network architecture parameters."""
 
+    network_type: str = "mlp"
+    """Network architecture: 'mlp' or 'cnn'."""
+
     hidden_size: int = 128
-    """Width of hidden layers."""
+    """Width of hidden layers (MLP)."""
 
     num_layers: int = 4
-    """Number of hidden layers."""
+    """Number of hidden layers (MLP)."""
+
+    num_filters: int = 64
+    """Number of convolutional filters (CNN)."""
+
+    num_res_blocks: int = 4
+    """Number of residual blocks (CNN)."""
 
 
 @dataclass

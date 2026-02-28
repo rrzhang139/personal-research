@@ -13,17 +13,35 @@ import numpy as np
 
 from alpha_go.games import get_game
 from alpha_go.mcts.search import MCTS
-from alpha_go.neural_net.simple_net import SimpleNetWrapper
+from alpha_go.neural_net import create_model
 from alpha_go.utils.config import MCTSConfig, NetworkConfig
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Play against AlphaZero")
-    parser.add_argument('--game', type=str, default='tictactoe')
-    parser.add_argument('--checkpoint', type=str, default='checkpoints/best.pt')
-    parser.add_argument('--num-simulations', type=int, default=100)
-    parser.add_argument('--hidden-size', type=int, default=128)
-    parser.add_argument('--num-layers', type=int, default=4)
+    parser = argparse.ArgumentParser(
+        description="Play against a trained AlphaZero model in the terminal",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""examples:
+  python scripts/play.py --game tictactoe
+  python scripts/play.py --game connect4 --checkpoint baselines/connect4/best.pt
+  python scripts/play.py --game tictactoe --num-simulations 200""",
+    )
+    parser.add_argument('--game', type=str, default='tictactoe',
+                        help='Game to play: tictactoe, connect4 (default: tictactoe)')
+    parser.add_argument('--checkpoint', type=str, default='checkpoints/best.pt',
+                        help='Path to model checkpoint (default: checkpoints/best.pt)')
+    parser.add_argument('--num-simulations', type=int, default=100,
+                        help='MCTS sims per AI move. More = stronger opponent (default: 100)')
+    parser.add_argument('--network', type=str, default='mlp', choices=['mlp', 'cnn'],
+                        help='Network type: mlp or cnn — must match checkpoint (default: mlp)')
+    parser.add_argument('--hidden-size', type=int, default=128,
+                        help='Hidden layer width (MLP) — must match checkpoint (default: 128)')
+    parser.add_argument('--num-layers', type=int, default=4,
+                        help='Number of hidden layers (MLP) — must match checkpoint (default: 4)')
+    parser.add_argument('--num-filters', type=int, default=64,
+                        help='Number of conv filters (CNN) — must match checkpoint (default: 64)')
+    parser.add_argument('--num-res-blocks', type=int, default=4,
+                        help='Number of residual blocks (CNN) — must match checkpoint (default: 4)')
     return parser.parse_args()
 
 
@@ -32,12 +50,14 @@ def main():
     game = get_game(args.game)
 
     # Load model
-    net_config = NetworkConfig(hidden_size=args.hidden_size, num_layers=args.num_layers)
-    model = SimpleNetWrapper(
-        board_size=game.get_board_size(),
-        action_size=game.get_action_size(),
-        config=net_config,
+    net_config = NetworkConfig(
+        network_type=args.network,
+        hidden_size=args.hidden_size,
+        num_layers=args.num_layers,
+        num_filters=args.num_filters,
+        num_res_blocks=args.num_res_blocks,
     )
+    model = create_model(game, net_config)
 
     if os.path.exists(args.checkpoint):
         model.load(args.checkpoint)
@@ -63,7 +83,7 @@ def main():
         print(game.display(state))
         print()
 
-        valid = game.get_valid_moves(state)
+        valid = game.get_valid_moves(state, player)
         valid_actions = np.where(valid > 0)[0]
 
         if player == 1:
@@ -85,7 +105,7 @@ def main():
             print(f"AI plays: {action}")
 
         state = game.get_next_state(state, action, player)
-        is_terminal, value = game.check_terminal(state, action)
+        is_terminal, value = game.check_terminal(state, action, player)
 
         if is_terminal:
             print(game.display(state))

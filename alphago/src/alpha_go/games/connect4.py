@@ -43,12 +43,12 @@ class ConnectFour(Game):
                 break
         return new_state
 
-    def get_valid_moves(self, state: np.ndarray) -> np.ndarray:
+    def get_valid_moves(self, state: np.ndarray, player: int = 1) -> np.ndarray:
         board = state.reshape(ROWS, COLS)
         # A column is valid if its top row is empty
         return (board[0, :] == 0).astype(np.float32)
 
-    def check_terminal(self, state: np.ndarray, action: int) -> tuple[bool, float]:
+    def check_terminal(self, state: np.ndarray, action: int, player: int = 1) -> tuple[bool, float]:
         board = state.reshape(ROWS, COLS)
 
         # Find the row where the last piece was placed
@@ -91,6 +91,9 @@ class ConnectFour(Game):
 
     def get_board_size(self) -> int:
         return ROWS * COLS  # 42
+
+    def get_board_shape(self) -> tuple[int, int]:
+        return (ROWS, COLS)  # (6, 7)
 
     def get_action_size(self) -> int:
         return COLS  # 7

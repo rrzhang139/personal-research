@@ -1,11 +1,13 @@
 """Game implementations."""
 
 from .connect4 import ConnectFour
+from .othello import Othello
 from .tictactoe import TicTacToe
 
 GAMES = {
     'tictactoe': TicTacToe,
     'connect4': ConnectFour,
+    'othello': Othello,
 }
 
 

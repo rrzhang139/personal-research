@@ -77,7 +77,7 @@ def self_play_game(
         state = game.get_next_state(state, action, player)
         move_count += 1
 
-        is_terminal, terminal_value = game.check_terminal(state, action)
+        is_terminal, terminal_value = game.check_terminal(state, action, player)
         if is_terminal:
             # Determine game outcome from P1's perspective
             if terminal_value == 0:

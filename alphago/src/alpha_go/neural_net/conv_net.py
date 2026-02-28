@@ -1,0 +1,173 @@
+"""Residual CNN for board games (AlphaZero-style).
+
+Architecture:
+    Board (flat) -> reshape (1, rows, cols)
+        -> initial conv (3x3, num_filters) + BN + ReLU
+        -> N residual blocks (two 3x3 convs with BN + skip)
+        -> policy head: 1x1 conv -> BN -> ReLU -> flatten -> FC(action_size)
+        -> value head:  1x1 conv -> BN -> ReLU -> flatten -> FC(64) -> ReLU -> FC(1) -> tanh
+
+Captures spatial patterns (corners, edges, flanking) that an MLP cannot exploit.
+"""
+
+from __future__ import annotations
+
+import copy
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from ..utils.config import NetworkConfig
+
+
+class ResBlock(nn.Module):
+    """Residual block: conv -> BN -> ReLU -> conv -> BN -> skip -> ReLU."""
+
+    def __init__(self, num_filters: int):
+        super().__init__()
+        self.conv1 = nn.Conv2d(num_filters, num_filters, 3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(num_filters)
+        self.conv2 = nn.Conv2d(num_filters, num_filters, 3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(num_filters)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out = F.relu(out + residual)
+        return out
+
+
+class ConvNet(nn.Module):
+    """Residual CNN with separate policy and value heads."""
+
+    def __init__(self, board_shape: tuple[int, int], action_size: int, config: NetworkConfig):
+        super().__init__()
+        self.board_shape = board_shape
+        self.action_size = action_size
+        self.config = config
+        rows, cols = board_shape
+        nf = config.num_filters
+
+        # Initial convolution
+        self.initial_conv = nn.Conv2d(1, nf, 3, padding=1, bias=False)
+        self.initial_bn = nn.BatchNorm2d(nf)
+
+        # Residual tower
+        self.res_blocks = nn.Sequential(
+            *[ResBlock(nf) for _ in range(config.num_res_blocks)]
+        )
+
+        # Policy head
+        self.policy_conv = nn.Conv2d(nf, 2, 1, bias=False)
+        self.policy_bn = nn.BatchNorm2d(2)
+        self.policy_fc = nn.Linear(2 * rows * cols, action_size)
+
+        # Value head
+        self.value_conv = nn.Conv2d(nf, 1, 1, bias=False)
+        self.value_bn = nn.BatchNorm2d(1)
+        self.value_fc1 = nn.Linear(rows * cols, 64)
+        self.value_fc2 = nn.Linear(64, 1)
+
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Forward pass.
+
+        Args:
+            x: Batch of board states, shape (B, board_size) — flat.
+
+        Returns:
+            (log_policy, value): log_policy shape (B, action_size), value shape (B, 1).
+        """
+        rows, cols = self.board_shape
+        # Reshape flat input to (B, 1, rows, cols)
+        h = x.view(-1, 1, rows, cols)
+
+        # Initial conv
+        h = F.relu(self.initial_bn(self.initial_conv(h)))
+
+        # Residual tower
+        h = self.res_blocks(h)
+
+        # Policy head
+        p = F.relu(self.policy_bn(self.policy_conv(h)))
+        p = p.view(p.size(0), -1)
+        log_pi = F.log_softmax(self.policy_fc(p), dim=1)
+
+        # Value head
+        v = F.relu(self.value_bn(self.value_conv(h)))
+        v = v.view(v.size(0), -1)
+        v = F.relu(self.value_fc1(v))
+        v = torch.tanh(self.value_fc2(v))
+
+        return log_pi, v
+
+
+class ConvNetWrapper:
+    """Wraps ConvNet with the same interface as SimpleNetWrapper."""
+
+    def __init__(self, board_size: int, action_size: int, config: NetworkConfig,
+                 lr: float = 0.001, board_shape: tuple[int, int] = (6, 6)):
+        self.net = ConvNet(board_shape, action_size, config)
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
+        self.board_size = board_size
+        self.board_shape = board_shape
+        self.action_size = action_size
+        self.config = config
+        self.lr = lr
+
+    def predict(self, state: np.ndarray) -> tuple[np.ndarray, float]:
+        self.net.eval()
+        with torch.no_grad():
+            x = torch.FloatTensor(state).unsqueeze(0).to(self.net.device)
+            log_pi, v = self.net(x)
+            pi = torch.exp(log_pi).squeeze(0).cpu().numpy()
+            value = v.item()
+        return pi, value
+
+    def train_step(self, states: np.ndarray, target_pis: np.ndarray, target_vs: np.ndarray) -> dict[str, float]:
+        self.net.train()
+        device = self.net.device
+
+        states_t = torch.FloatTensor(states).to(device)
+        target_pis_t = torch.FloatTensor(target_pis).to(device)
+        target_vs_t = torch.FloatTensor(target_vs).unsqueeze(1).to(device)
+
+        log_pi, v = self.net(states_t)
+
+        policy_loss = -torch.sum(target_pis_t * log_pi) / states_t.size(0)
+        value_loss = F.mse_loss(v, target_vs_t)
+        total_loss = policy_loss + value_loss
+
+        self.optimizer.zero_grad()
+        total_loss.backward()
+        self.optimizer.step()
+
+        return {
+            'total_loss': total_loss.item(),
+            'policy_loss': policy_loss.item(),
+            'value_loss': value_loss.item(),
+        }
+
+    def save(self, path: str):
+        torch.save({
+            'model': self.net.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+        }, path)
+
+    def load(self, path: str):
+        checkpoint = torch.load(path, map_location=self.net.device, weights_only=True)
+        self.net.load_state_dict(checkpoint['model'])
+        self.optimizer.load_state_dict(checkpoint['optimizer'])
+
+    def clone(self) -> 'ConvNetWrapper':
+        new_wrapper = ConvNetWrapper(
+            self.board_size, self.action_size, self.config,
+            self.lr, self.board_shape,
+        )
+        new_wrapper.net.load_state_dict(copy.deepcopy(self.net.state_dict()))
+        return new_wrapper
