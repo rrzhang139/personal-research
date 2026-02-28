@@ -82,6 +82,7 @@ These conventions apply regardless of which provider you use:
 - **HDF5_USE_FILE_LOCKING=FALSE**: Required on NFS-backed volumes (RunPod, some Vast.ai hosts)
 - **wandb**: Log ALL experiments to Weights & Biases for tracking
 - **Data backup**: Pod volumes are ephemeral. Always upload checkpoints to W&B artifacts and git push code before stopping/terminating. See `providers/runpod.md` for backup procedures.
+- **Two-repo workflow (uwlab)**: The `uwlab/UWLab/` directory is a SEPARATE git repo (`rrzhang139/UWLab`, forked from `uw-lab/UWLab`). It is gitignored by personal-research. When editing UWLab source files, push from INSIDE `uwlab/UWLab/`. Always pull/push both repos: `cd /workspace/code/personal-research && git pull && cd uwlab/UWLab && git pull`.
 
 ## SSH Patterns (All Providers)
 

@@ -90,22 +90,39 @@ cd /workspace/code/personal-research/uwlab/UWLab
 | `OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-NearGoal-v0` | 2 near-goal resets | Training (near-goal) |
 | `OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-Play-v0` | ObjectAnywhereEEAnywhere only | Evaluation |
 
-### Timing Reference (for sleep/wait durations)
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Isaac Sim init (first launch) | ~3 min | Extensions download, scene creation |
-| Isaac Sim init (cached) | ~2 min | Scene creation only |
-| Eval rollout (200 steps, 1 env) | ~2 min | After init, includes video recording |
-| Eval total (init + rollout + wandb upload) | ~5 min | End-to-end |
-| Training first iteration | ~3 min after init | Isaac Sim init + first PPO update |
-| Training per iteration (4096 envs) | ~15s | Steady state |
-| Training total (40k iters) | ~4 hours | Single RTX 4090 |
-| wandb upload (video) | ~10s | After rollout completes |
+### Timing Reference (plan sleeps/timeouts around these)
 
-**Recommended sleep times when checking:**
-- After launching training: `sleep 180` (3 min) to verify first iteration
-- After launching eval: `sleep 180` (3 min) for first check, `sleep 120` (2 min) for second if still running
-- After launching Isaac Sim import test: `sleep 60` (1 min)
+**Pod Setup (fresh pod, end-to-end ~15 min):**
+| Phase | Duration | Bash timeout / sleep |
+|-------|----------|---------------------|
+| Pod creation API → SSH reachable | 1-2 min | Poll `ssh ... 'echo OK'` every 15s, max 3 min |
+| setup.sh (system packages, node, uv, auth, claude) | ~2-3 min | timeout 300s |
+| setup_env.sh in tmux (Isaac Sim ~12GB download) | ~8-10 min | `sleep 480`, then check |
+| Clone fork + install UWLab/rsl_rl | ~1-2 min | timeout 120s |
+| Checkpoint download + patch + smoke test | ~30s | timeout 120s |
+
+**Training & Eval:**
+| Operation | Time | Bash timeout / sleep |
+|-----------|------|---------------------|
+| Isaac Sim init (first launch) | ~3 min | Already included in first iter |
+| Isaac Sim init (cached) | ~2 min | Already included in first iter |
+| Training first iteration (1x GPU, 4096 envs) | ~3 min after launch | `sleep 180` then check |
+| Training per iteration (1x GPU, 4096 envs) | ~15s | — |
+| Training per iteration (4x GPU, 16384 envs/GPU) | ~22s | — |
+| Training total 40k iters (1x RTX 4090, 4096 envs) | ~4 hours | — |
+| Training total 40k iters (4x RTX 4090, 16384 envs/GPU) | ~8-16 hours | Check every 4 hrs |
+| Training VRAM per GPU (16384 envs) | ~15 GB / 24 GB | — |
+| Eval rollout (200 steps, 1 env) | ~2 min | `sleep 120` |
+| Eval total (init + rollout + wandb upload) | ~5 min | `sleep 300` |
+| wandb upload (video) | ~10s | — |
+
+**Recommended sleep/timeout patterns:**
+- After launching training in tmux: `sleep 180` (3 min) to verify first iteration
+- After launching eval in tmux: `sleep 300` (5 min) for full eval
+- For setup_env.sh: `sleep 480` (8 min), then check, if still running `sleep 120`
+- SSH commands < 30s: use default timeout
+- SSH commands with setup.sh: timeout 300s (5 min)
+- When checking long-running training: no sleep needed, just SSH in and tail the log
 
 ### Eval with Video Recording
 - `play.py` has built-in `--video` flag using `gym.wrappers.RecordVideo`
@@ -166,31 +183,61 @@ python scripts/reinforcement_learning/rsl_rl/train.py \
 '"
 ```
 
-## Directory Structure
+## Two-Repo Structure
+
+This project spans TWO separate git repos:
+
+1. **personal-research** (`rrzhang139/personal-research`) — this repo
+   - Contains: launch scripts, configs, CLAUDE.md, experiment tools, `sac_her/` implementation
+   - Push to: `git push` from `/workspace/code/personal-research`
+
+2. **UWLab** (`rrzhang139/UWLab`) — forked from `uw-lab/UWLab`
+   - Contains: Isaac Lab env definitions, reward functions, observation functions, training entrypoints
+   - Cloned into: `uwlab/UWLab/` (gitignored by personal-research)
+   - Push to: `cd uwlab/UWLab && git push` (separate repo!)
+   - Upstream: `git remote add upstream https://github.com/uw-lab/UWLab.git`
+   - Source on GitHub: https://github.com/rrzhang139/UWLab
+
+**CRITICAL: When editing UWLab source files (env configs, rewards, observations), you must `git add/commit/push` from INSIDE `uwlab/UWLab/`, not from personal-research root. These are independent git repos.**
+
 ```
-uwlab/
-├── .venv/              # Python 3.11 venv with Isaac Sim + UWLab
-├── UWLab/              # Cloned UWLab repo (fork: rrzhang139/UWLab, gitignored)
-├── setup_env.sh        # Environment setup script
-├── CLAUDE.md           # This file
-├── scripts/            # Custom launch scripts
-│   ├── train_omnireset_single_gpu.sh   # Train with all 4 resets
-│   ├── train_omnireset_near_goal.sh    # Train with 2 near-goal resets
-│   ├── eval_wandb.sh                  # Eval + upload video to wandb
-│   └── upload_eval_wandb.py           # wandb video upload helper
-├── exported/           # Exported policies (gitignored)
-├── eval_videos/        # Eval videos (gitignored)
-├── videos/             # Training videos (gitignored)
-└── logs/               # Training logs (gitignored)
+/workspace/code/personal-research/          ← repo 1: rrzhang139/personal-research
+  uwlab/
+    CLAUDE.md                                ← in personal-research
+    setup_env.sh                             ← in personal-research
+    scripts/                                 ← in personal-research (launch scripts)
+    sac_her/                                 ← in personal-research (SAC+HER implementation)
+    .venv/                                   ← gitignored (Python venv with Isaac Sim)
+    UWLab/                                   ← repo 2: rrzhang139/UWLab (gitignored by repo 1)
+      scripts/reinforcement_learning/        ← training entrypoints (train.py, play.py)
+      source/uwlab_tasks/                    ← env definitions, rewards, obs, mdp
+    exported/                                ← gitignored
+    eval_videos/                             ← gitignored
+    logs/                                    ← gitignored
 ```
 
+UWLab is pip-installed in editable mode via `./uwlab.sh --install`, so `import uwlab_tasks` resolves to the source directory. Any edits to UWLab source take effect immediately (no reinstall needed).
+
 ## File Locations
+
+**In personal-research (this repo):**
+| File | Description |
+|------|-------------|
+| `uwlab/scripts/train_omnireset_*.sh` | Launch scripts for training |
+| `uwlab/scripts/eval_wandb.sh` | Eval + wandb video upload |
+| `uwlab/scripts/patch_adaptive.py` | Adaptive reset probability patch |
+| `uwlab/sac_her/` | SAC + HER implementation (Phase 3) |
+
+**In UWLab fork (separate repo, gitignored):**
 | File | Description |
 |------|-------------|
 | `UWLab/scripts/reinforcement_learning/rsl_rl/train.py` | RL training entrypoint |
 | `UWLab/scripts/reinforcement_learning/rsl_rl/play.py` | Evaluation/play entrypoint |
-| `UWLab/scripts/reinforcement_learning/rsl_rl/cli_args.py` | CLI arg parsing (--checkpoint, --resume, etc.) |
+| `UWLab/scripts/reinforcement_learning/rsl_rl/cli_args.py` | CLI arg parsing |
 | `UWLab/source/uwlab_tasks/.../ur5e_robotiq_2f85/rl_state_cfg.py` | Main config: scene, resets, rewards, obs |
 | `UWLab/source/uwlab_tasks/.../ur5e_robotiq_2f85/rl_state_near_goal_cfg.py` | 2-reset near-goal config |
 | `UWLab/source/uwlab_tasks/.../ur5e_robotiq_2f85/agents/rsl_rl_cfg.py` | PPO hyperparameters |
 | `UWLab/source/uwlab_tasks/.../ur5e_robotiq_2f85/__init__.py` | Task registration (gym.register) |
+| `UWLab/source/uwlab_tasks/.../reset_states/mdp/events.py` | Reset sampling (MultiResetManager) |
+| `UWLab/source/uwlab_tasks/.../reset_states/mdp/rewards.py` | Reward functions |
+| `UWLab/source/uwlab_tasks/.../reset_states/mdp/observations.py` | Observation functions |
