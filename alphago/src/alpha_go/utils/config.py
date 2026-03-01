@@ -32,6 +32,12 @@ class MCTSConfig:
     """After this many moves in a game, switch to greedy (temp -> 0).
     Encourages exploration early, exploitation late."""
 
+    nn_batch_size: int = 1
+    """Batch size for neural network evaluations within MCTS.
+    1 = sequential (original). >1 = virtual loss batching — collects
+    this many leaf positions per batch, evaluates in one forward pass.
+    Default 8 is a good balance for CPU; GPU benefits from larger batches."""
+
 
 @dataclass
 class NetworkConfig:
@@ -105,6 +111,9 @@ class AlphaZeroConfig:
 
     seed: int = 42
     """Random seed for reproducibility."""
+
+    num_workers: int = 1
+    """Parallel workers for self-play/arena. 0=auto (cpu_count-1), 1=sequential."""
 
     use_wandb: bool = False
     """Whether to log to Weights & Biases."""

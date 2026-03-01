@@ -63,7 +63,20 @@ model.load('baselines/connect4/best.pt')
 
 ```
 baselines/<game>/
+├── args.json            # Exact config for reproduction (load & modify for experiments)
 ├── best.pt              # Model weights (best accepted model)
 ├── history.json         # Full training metrics per iteration
 └── training_curves.png  # 6-panel training plot
+```
+
+## Using args.json
+
+Each game has an `args.json` with the exact parameters used. To reproduce or modify:
+
+```bash
+# Reproduce exactly
+python scripts/train.py --game tictactoe --num-simulations 50
+
+# Use as starting point for experiments — modify one knob
+python scripts/train.py --game tictactoe --num-simulations 50 --num-workers 4
 ```

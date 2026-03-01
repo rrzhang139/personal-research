@@ -1,0 +1,28 @@
+{
+  "game": "othello",
+  "num_simulations": 200,
+  "num_iterations": 3,
+  "games_per_iteration": 50,
+  "arena_games": 20,
+  "eval_games": 30,
+  "configs": {
+    "baseline": {
+      "workers": 1,
+      "nn_batch": 1
+    },
+    "4w_batch1": {
+      "workers": 4,
+      "nn_batch": 1
+    },
+    "4w_batch8": {
+      "workers": 4,
+      "nn_batch": 8
+    }
+  },
+  "network": {
+    "hidden_size": 128,
+    "num_layers": 4,
+    "type": "mlp"
+  },
+  "cpu_count": 14
+}

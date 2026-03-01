@@ -4,7 +4,7 @@ import numpy as np
 
 from alpha_go.games.tictactoe import TicTacToe
 from alpha_go.neural_net.simple_net import SimpleNetWrapper
-from alpha_go.training.arena import play_vs_random
+from alpha_go.training.arena import arena_compare, play_vs_random
 from alpha_go.training.self_play import self_play_game, generate_self_play_data
 from alpha_go.training.trainer import train_on_examples
 from alpha_go.utils.config import MCTSConfig, NetworkConfig
@@ -87,4 +87,52 @@ class TestArena:
         config = MCTSConfig(num_simulations=10, dirichlet_epsilon=0.0)
 
         win_rate = play_vs_random(game, model, config, num_games=20)
+        assert 0.0 <= win_rate <= 1.0
+
+
+class TestParallelSelfPlay:
+
+    def test_parallel_self_play(self):
+        """Parallel self-play should produce valid training data."""
+        game = TicTacToe()
+        model = _make_model()
+        config = MCTSConfig(num_simulations=5, dirichlet_epsilon=0.0)
+
+        examples, stats = generate_self_play_data(
+            game, model, config, num_games=4, augment=False,
+            num_workers=2, game_name='tictactoe',
+        )
+        assert len(examples) > 0
+        assert stats.p1_wins + stats.p2_wins + stats.draws == 4
+
+        for state, pi, v in examples:
+            assert state.shape == (9,)
+            assert pi.shape == (9,)
+            assert abs(pi.sum() - 1.0) < 1e-5
+            assert v in [-1.0, 0.0, 1.0]
+
+    def test_parallel_arena(self):
+        """Parallel arena should produce valid results."""
+        game = TicTacToe()
+        model1 = _make_model()
+        model2 = _make_model()
+        config = MCTSConfig(num_simulations=5, dirichlet_epsilon=0.0)
+
+        win_rate, stats = arena_compare(
+            game, model1, model2, config, num_games=4,
+            num_workers=2, game_name='tictactoe',
+        )
+        assert 0.0 <= win_rate <= 1.0
+        assert stats['new_wins'] + stats['old_wins'] + stats['draws'] == 4
+
+    def test_parallel_vs_random(self):
+        """Parallel vs-random should produce valid win rate."""
+        game = TicTacToe()
+        model = _make_model()
+        config = MCTSConfig(num_simulations=5, dirichlet_epsilon=0.0)
+
+        win_rate = play_vs_random(
+            game, model, config, num_games=4,
+            num_workers=2, game_name='tictactoe',
+        )
         assert 0.0 <= win_rate <= 1.0

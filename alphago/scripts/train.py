@@ -50,6 +50,8 @@ def parse_args():
                    help='Noise weight at root. 0 = no noise, 0.25 = AlphaZero default (default: 0.25)')
     m.add_argument('--temp-threshold', type=int, default=15,
                    help='Move number after which play becomes greedy. Higher = explore longer in each game (default: 15)')
+    m.add_argument('--nn-batch-size', type=int, default=1,
+                   help='NN eval batch size within MCTS. 1=sequential, >1=virtual loss batching (default: 1)')
 
     # Network
     n = parser.add_argument_group('network', 'Neural network architecture')
@@ -88,6 +90,11 @@ def parse_args():
     a.add_argument('--update-threshold', type=float, default=0.55,
                    help='Win rate to accept new model. 0.55 = must win >55%% (default: 0.55)')
 
+    # Parallelism
+    p = parser.add_argument_group('parallelism')
+    p.add_argument('--num-workers', type=int, default=1,
+                   help='Parallel workers for self-play/arena. 0=auto, 1=sequential (default: 1)')
+
     # Logging
     l = parser.add_argument_group('logging')
     l.add_argument('--wandb', action='store_true',
@@ -108,6 +115,7 @@ def main():
             dirichlet_alpha=args.dirichlet_alpha,
             dirichlet_epsilon=args.dirichlet_epsilon,
             temp_threshold=args.temp_threshold,
+            nn_batch_size=args.nn_batch_size,
         ),
         network=NetworkConfig(
             network_type=args.network,
@@ -131,6 +139,7 @@ def main():
         ),
         game=args.game,
         seed=args.seed,
+        num_workers=args.num_workers,
         use_wandb=args.wandb,
         wandb_project=args.wandb_project,
     )

@@ -254,23 +254,74 @@ A living catalog of tunable knobs. Each row is something you can experiment with
 
 | Surface Area | Current State | Knobs | Source |
 |---|---|---|---|
-| **MCTS** | Basic PUCT | `num_simulations`, `c_puct`, `dirichlet_alpha`, `dirichlet_epsilon`, `temp_schedule` | [AlphaZero](https://arxiv.org/abs/1712.01815) |
-| **Network** | Simple MLP | `hidden_size`, `num_layers` | — |
-| **Training** | Basic self-play loop | `lr`, `batch_size`, `num_iterations`, `games_per_iteration`, `epochs_per_iteration` | — |
+| **MCTS** | PUCT + virtual loss batching | `num_simulations`, `c_puct`, `dirichlet_alpha`, `dirichlet_epsilon`, `temp_schedule`, `nn_batch_size` | [AlphaZero](https://arxiv.org/abs/1712.01815) |
+| **Network** | MLP + CNN | `hidden_size`, `num_layers`, `num_filters`, `num_res_blocks`, `network_type` | — |
+| **Training** | Parallel self-play | `lr`, `batch_size`, `num_iterations`, `games_per_iteration`, `epochs_per_iteration`, `num_workers` | — |
 | **Arena** | Win-rate threshold | `update_threshold`, `arena_games` | — |
 | **Replay Buffer** | Fixed-size FIFO | `max_buffer_size` | — |
 
 ### Future Surface Areas (added through discourse)
-- Residual CNN (for board games beyond tic-tac-toe)
 - Board symmetry augmentation (already implemented — 8x free data for tic-tac-toe)
 - Learning rate schedules (cosine, step decay)
 - Weight decay / L2 regularization
 - Temperature annealing across training (not just within games)
 - Tree reuse between moves (reuse subtree after a move is played)
-- MCTS parallelization (virtual loss, batched NN evaluation)
-- Go / Connect4 / Othello game implementations
+- Pool reuse (keep one pool per iteration instead of per-phase — saves ~6s/iter on macOS)
+- Go game implementation
 - KataGo innovations (playout cap randomization, auxiliary targets)
 - Gumbel AlphaZero (Sequential Halving — provably good at low sim counts)
+
+## Running on GPU (RunPod)
+
+For experiments that take >10 min on CPU (Othello, larger games, CNN networks), use a cheap RunPod pod.
+
+**Setup pattern:**
+```bash
+# 1. Push code to git first (local)
+cd personal-research && git add alphago/ && git commit -m "..." && git push
+
+# 2. Create pod via API (RTX A4000 = $0.17/hr, most reliable availability)
+# See providers/runpod-cheap.md for the curl command
+
+# 3. SSH and setup (one-time per pod)
+ssh -tt -i ~/.ssh/runpod <podHostId>@ssh.runpod.io << 'SSHEOF'
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+cd /workspace
+git clone https://github.com/rrzhang139/personal-research.git code/personal-research
+cd code/personal-research/alphago && bash setup_env.sh
+exit
+SSHEOF
+
+# 4. Launch experiment (MUST use python -u for unbuffered output to log file)
+ssh -tt -i ~/.ssh/runpod <podHostId>@ssh.runpod.io << 'SSHEOF'
+export PATH="$HOME/.local/bin:$PATH"
+cd /workspace/code/personal-research/alphago && source .venv/bin/activate
+nohup python -u experiments/<exp>/run.py > /workspace/exp_output.log 2>&1 &
+echo "PID: $!"
+exit
+SSHEOF
+
+# 5. Monitor progress
+ssh -tt -i ~/.ssh/runpod <podHostId>@ssh.runpod.io << 'SSHEOF'
+tail -30 /workspace/exp_output.log
+exit
+SSHEOF
+
+# 6. Pull results back (from pod)
+ssh -tt ... << 'SSHEOF'
+cd /workspace/code/personal-research && git add -f alphago/experiments/<exp>/ && git commit -m "results" && git push
+exit
+SSHEOF
+```
+
+**Key gotchas:**
+- **GPU + virtual loss**: With `--nn-batch-size 8+`, GPU can now help via batched forward passes. Without batching (batch=1), GPU transfer overhead makes it 3-4x SLOWER than CPU. Always use `--nn-batch-size 8` or higher with GPU.
+- `tmux` is NOT pre-installed on cheap pods — use `nohup` or install tmux first (`apt-get install -y tmux`)
+- Python buffers stdout when redirected to file — always use `python -u` (unbuffered)
+- RunPod SSH gateway requires heredoc (`<< 'SSHEOF'`) — passing commands as args is ignored
+- Terminate pod when done to avoid idle storage charges ($0.005/hr)
+- Cloud vCPUs are much slower than Mac for single-threaded Python — MLP Othello baseline: 16.7m local vs 97m on pod
 
 ## Experiment Workflow
 
@@ -281,6 +332,16 @@ Use the `/experiment` slash command:
 ```
 
 Creates a timestamped folder under `experiments/` with `config.json`, `data/`, `figures/`, and `report.md`.
+
+**After every experiment or implementation finishes, you MUST do both of these before moving on:**
+
+1. **Update `PROGRESS.md`** — append a row to the progress log table. Include: date, what was done, baseline, measured result, and notes with file paths / report links. This is the breadcrumb trail for the next agent. No exceptions.
+2. **Git commit and push** — stage the new/changed files and push so nothing is lost:
+   ```bash
+   git add -A alphago/ && git commit -m "<short description>" && git push
+   ```
+
+These two steps apply to implementations, experiments, and hypothesis results alike. If you skip them, the next session starts blind and work may be lost.
 
 ## Reading Guide
 
@@ -297,16 +358,7 @@ Read the source in this order:
 
 ## Progress Log
 
-Track of features implemented and improvements measured. Each entry records the date, what was done, and the measured impact vs the relevant baseline.
-
-| Date | Feature | Baseline | Result | Notes |
-|------|---------|----------|--------|-------|
-| 2026-02-26 | **Initial testbed** — full AlphaZero pipeline on tic-tac-toe (MCTS + PUCT, MLP dual-head net, self-play → train → arena loop, config system, CLI, `/experiment` command) | Random play | 97% win rate vs random after 25 iters (3 min CPU). 38 tests pass. | All core components: game engine, MCTS search, neural net, training pipeline, arena eval |
-| 2026-02-26 | **Logging & diagnostics** — compact table output with config diff from defaults, MCTS diagnostics (policy entropy, root value, search depth), 6-panel training plots, W&B integration with grouped metrics | Verbose per-stage print statements | H(pi) drops 1.47→1.0, search depth increases 1.9→3.1 over training. Plots auto-saved. history.json for offline analysis. | Metrics: loss/{total,policy,value}, eval/{vs_random,arena}, mcts/{entropy,root_value,depth}, self_play/{outcomes,game_length} |
-| 2026-02-27 | **num_simulations sweep** — experiment sweeping sims=[1,5,10,25,50,100] on tic-tac-toe | Default 25 sims | 1 sim: 61% (broken). 5 sims: 90% (biggest jump). 10-25: 95% (knee). 50-100: 99% (diminishing returns). 1-sim loss is lowest (0.53) but plays worst — soft policy targets from more sims are harder to fit but far better training signal. | `experiments/20260227_num_sims_sweep/` |
-| 2026-02-27 | **Connect Four** — game engine (6x7, gravity, 4-in-a-row check, left-right mirror symmetry) + baseline training | Random play | 100% vs random in 7.8m (50 sims, 25 iters). Search depth 5.6 (vs 4.4 for ttt). Arena stays competitive throughout (harder game). 56 tests pass. | `games/connect4.py`, 18 new tests |
-| 2026-02-27 | **Baselines system** — reproducible reference models per game with consistent params (50 sims, 4x128 MLP, 25 iters) for cross-game comparison. Checkpoints + history stored. | — | TTT: 95-100% vs random (3.5m). C4: 100% vs random (7.8m). | `baselines/` with README, see `ROADMAP.md` for progression plan |
-| 2026-02-27 | **Othello (6x6)** — game engine with pass moves, flipping logic, 8-fold symmetry. Interface changes: `check_terminal(state, action, player)` and `get_valid_moves(state, player)` — backward-compatible defaults. 35 new tests (91 total). | Random play | 60% vs random (74% peak), 16.7m. MLP baseline struggles — spatial patterns need CNN. Only 5/25 models accepted. | `games/othello.py`, first game with pass moves, establishes MLP ceiling for spatial games |
+**See [`PROGRESS.md`](PROGRESS.md)** for the full log of every implementation, experiment, and hypothesis with measured results. Read it first to understand where the project stands.
 
 ## Baselines
 

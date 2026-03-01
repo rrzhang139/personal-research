@@ -88,6 +88,16 @@ class SimpleNetWrapper:
             value = v.item()
         return pi, value
 
+    def predict_batch(self, states: list[np.ndarray]) -> tuple[list[np.ndarray], list[float]]:
+        """Batch prediction for multiple states (used by virtual loss MCTS)."""
+        self.net.eval()
+        with torch.no_grad():
+            x = torch.FloatTensor(np.array(states)).to(self.net.device)
+            log_pi, v = self.net(x)
+            policies = torch.exp(log_pi).cpu().numpy()
+            values = v.squeeze(-1).cpu().numpy()
+        return list(policies), list(values)
+
     def train_step(self, states: np.ndarray, target_pis: np.ndarray, target_vs: np.ndarray) -> dict[str, float]:
         self.net.train()
         device = self.net.device

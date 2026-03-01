@@ -100,3 +100,28 @@ class MCTSNode:
             node.Q = node.W / node.N
             value = -value  # flip perspective for parent
             node = node.parent
+
+    def apply_virtual_loss(self):
+        """Apply virtual loss up the path to discourage parallel sims from same path.
+
+        Increments N and adds +1 to W at every node from self to root.
+        Since select_child uses exploit = -child.Q, increasing child.Q (via W+=1)
+        makes -child.Q smaller, reducing the node's attractiveness to its parent.
+        Sign does NOT alternate (unlike backprop) because every node should
+        independently look worse to its own parent.
+        """
+        node = self
+        while node is not None:
+            node.N += 1
+            node.W += 1.0
+            node.Q = node.W / node.N
+            node = node.parent
+
+    def revert_virtual_loss(self):
+        """Revert virtual loss from the path (undo one apply_virtual_loss call)."""
+        node = self
+        while node is not None:
+            node.N -= 1
+            node.W -= 1.0
+            node.Q = node.W / node.N if node.N > 0 else 0.0
+            node = node.parent

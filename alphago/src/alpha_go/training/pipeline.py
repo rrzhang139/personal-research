@@ -20,6 +20,7 @@ import numpy as np
 from ..games.base_game import Game
 from ..utils.config import AlphaZeroConfig
 from .arena import arena_compare, play_vs_random
+from .parallel import resolve_num_workers
 from .self_play import generate_self_play_data
 from .trainer import train_on_examples
 
@@ -31,6 +32,7 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
         History dict with per-iteration metrics.
     """
     np.random.seed(config.seed)
+    num_workers = resolve_num_workers(config.num_workers)
 
     # Setup
     os.makedirs(config.training.checkpoint_dir, exist_ok=True)
@@ -63,7 +65,7 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
             config=_config_to_dict(config),
         )
 
-    _print_header(config)
+    _print_header(config, num_workers)
     _print_table_header()
 
     best_model = model
@@ -73,16 +75,21 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
         t_iter = time.time()
 
         # 1. Self-play
+        t_phase = time.time()
         new_examples, sp_stats = generate_self_play_data(
             game=game,
             model=best_model,
             mcts_config=config.mcts,
             num_games=config.training.games_per_iteration,
             augment=True,
+            num_workers=num_workers,
+            game_name=config.game,
         )
         replay_buffer.extend(new_examples)
+        t_self_play = time.time() - t_phase
 
         # 2. Train
+        t_phase = time.time()
         new_model = best_model.clone()
         losses = train_on_examples(
             model=new_model,
@@ -90,15 +97,20 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
             batch_size=config.training.batch_size,
             epochs=config.training.epochs_per_iteration,
         )
+        t_train = time.time() - t_phase
 
         # 3. Arena
+        t_phase = time.time()
         win_rate, arena_stats = arena_compare(
             game=game,
             new_model=new_model,
             old_model=best_model,
             mcts_config=config.mcts,
             num_games=config.arena.arena_games,
+            num_workers=num_workers,
+            game_name=config.game,
         )
+        t_arena = time.time() - t_phase
 
         # 4. Accept or reject
         accepted = win_rate >= config.arena.update_threshold
@@ -107,7 +119,12 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
             best_model.save(os.path.join(config.training.checkpoint_dir, 'best.pt'))
 
         # 5. Evaluate vs random
-        vs_random = play_vs_random(game, best_model, config.mcts, num_games=50)
+        t_phase = time.time()
+        vs_random = play_vs_random(
+            game, best_model, config.mcts, num_games=50,
+            num_workers=num_workers, game_name=config.game,
+        )
+        t_eval = time.time() - t_phase
 
         iter_time = time.time() - t_iter
 
@@ -168,6 +185,11 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
                 # Infrastructure
                 'buffer_size': len(replay_buffer),
                 'iter_time': iter_time,
+                # Phase timing
+                'time/self_play': t_self_play,
+                'time/train': t_train,
+                'time/arena': t_arena,
+                'time/eval': t_eval,
             })
 
     # Save final model
@@ -199,13 +221,14 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
 # Logging helpers
 # ---------------------------------------------------------------------------
 
-def _print_header(config: AlphaZeroConfig):
+def _print_header(config: AlphaZeroConfig, num_workers: int = 1):
     """Print a compact run header with config and diff from defaults."""
     print()
     print(f"  AlphaZero — {config.game}")
     net = f"{config.network.num_layers}x{config.network.hidden_size} MLP"
     mcts = f"{config.mcts.num_simulations} sims, c_puct={config.mcts.c_puct}"
-    print(f"  Network: {net}  |  MCTS: {mcts}  |  LR: {config.training.lr}")
+    workers_str = f"  |  Workers: {num_workers}" if num_workers > 1 else ""
+    print(f"  Network: {net}  |  MCTS: {mcts}  |  LR: {config.training.lr}{workers_str}")
 
     diff = _config_diff(config)
     if diff:

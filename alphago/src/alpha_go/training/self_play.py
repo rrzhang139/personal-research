@@ -59,10 +59,12 @@ def self_play_game(
         canonical = game.get_canonical_state(state, player)
 
         # Use temperature: exploratory early, greedy late
+        # NOTE: set on the MCTS instance's copy, not the shared config
         if move_count < mcts_config.temp_threshold:
-            mcts.config.temperature = 1.0
+            temp = 1.0
         else:
-            mcts.config.temperature = 0.01  # nearly greedy
+            temp = 0.01  # nearly greedy
+        mcts.temperature = temp
 
         pi, diag = mcts.search(state, player, collect_diagnostics=collect_diagnostics)
         trajectory.append((canonical.copy(), player, pi.copy()))
@@ -108,18 +110,52 @@ def self_play_game(
         player = -player
 
 
+def _worker_self_play_game(args):
+    """Top-level function for pool.map: play one self-play game using process-global model."""
+    from .parallel import _worker_model
+    game_name, mcts_config = args
+
+    from ..games import get_game
+    game = get_game(game_name)
+
+    examples, outcome, diag = self_play_game(
+        game, _worker_model, mcts_config, collect_diagnostics=True
+    )
+    return examples, outcome, diag
+
+
 def generate_self_play_data(
     game: Game,
     model,
     mcts_config: MCTSConfig,
     num_games: int,
     augment: bool = True,
+    num_workers: int = 1,
+    game_name: str | None = None,
 ) -> tuple[list[tuple[np.ndarray, np.ndarray, float]], SelfPlayStats]:
     """Generate training data from multiple self-play games.
+
+    Args:
+        num_workers: Number of parallel workers. 1 = sequential (no overhead).
+        game_name: Game name string (required for parallel, used to reconstruct game in workers).
 
     Returns:
         (examples, stats): examples is the training data, stats has outcomes + diagnostics.
     """
+    if num_workers > 1 and game_name is not None:
+        return _generate_parallel(game, model, mcts_config, num_games, augment, num_workers, game_name)
+
+    return _generate_sequential(game, model, mcts_config, num_games, augment)
+
+
+def _generate_sequential(
+    game: Game,
+    model,
+    mcts_config: MCTSConfig,
+    num_games: int,
+    augment: bool,
+) -> tuple[list[tuple[np.ndarray, np.ndarray, float]], SelfPlayStats]:
+    """Original sequential implementation."""
     all_examples = []
     stats = SelfPlayStats()
     game_lengths = []
@@ -132,6 +168,64 @@ def generate_self_play_data(
             game, model, mcts_config, collect_diagnostics=True
         )
 
+        if outcome == 1:
+            stats.p1_wins += 1
+        elif outcome == -1:
+            stats.p2_wins += 1
+        else:
+            stats.draws += 1
+
+        if diag:
+            game_lengths.append(diag['game_length'])
+            root_values.append(diag['mean_root_value'])
+            policy_entropies.append(diag['mean_policy_entropy'])
+            search_depths.append(diag['mean_search_depth'])
+
+        if augment:
+            for state, pi, v in examples:
+                for sym_state, sym_pi in game.get_symmetries(state, pi):
+                    all_examples.append((sym_state, sym_pi, v))
+        else:
+            all_examples.extend(examples)
+
+    if game_lengths:
+        stats.mean_game_length = float(np.mean(game_lengths))
+        stats.mean_root_value = float(np.mean(root_values))
+        stats.mean_policy_entropy = float(np.mean(policy_entropies))
+        stats.mean_search_depth = float(np.mean(search_depths))
+
+    return all_examples, stats
+
+
+def _generate_parallel(
+    game: Game,
+    model,
+    mcts_config: MCTSConfig,
+    num_games: int,
+    augment: bool,
+    num_workers: int,
+    game_name: str,
+) -> tuple[list[tuple[np.ndarray, np.ndarray, float]], SelfPlayStats]:
+    """Parallel implementation using multiprocessing pool."""
+    from .parallel import create_pool
+
+    pool = create_pool(model, num_workers)
+    try:
+        args_list = [(game_name, mcts_config)] * num_games
+        results = pool.map(_worker_self_play_game, args_list)
+    finally:
+        pool.close()
+        pool.join()
+
+    # Aggregate results
+    all_examples = []
+    stats = SelfPlayStats()
+    game_lengths = []
+    root_values = []
+    policy_entropies = []
+    search_depths = []
+
+    for examples, outcome, diag in results:
         if outcome == 1:
             stats.p1_wins += 1
         elif outcome == -1:
