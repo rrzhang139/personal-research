@@ -71,6 +71,9 @@ class ConvNet(nn.Module):
         self.value_fc1 = nn.Linear(rows * cols, 64)
         self.value_fc2 = nn.Linear(64, 1)
 
+        # Dropout (applied in policy and value heads)
+        self.dropout = nn.Dropout(config.dropout) if config.dropout > 0 else nn.Identity()
+
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.to(self.device)
 
@@ -96,12 +99,15 @@ class ConvNet(nn.Module):
         # Policy head
         p = F.relu(self.policy_bn(self.policy_conv(h)))
         p = p.view(p.size(0), -1)
+        p = self.dropout(p)
         log_pi = F.log_softmax(self.policy_fc(p), dim=1)
 
         # Value head
         v = F.relu(self.value_bn(self.value_conv(h)))
         v = v.view(v.size(0), -1)
+        v = self.dropout(v)
         v = F.relu(self.value_fc1(v))
+        v = self.dropout(v)
         v = torch.tanh(self.value_fc2(v))
 
         return log_pi, v

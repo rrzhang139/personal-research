@@ -65,6 +65,8 @@ def parse_args():
                    help='Number of conv filters (CNN). (default: 64)')
     n.add_argument('--num-res-blocks', type=int, default=4,
                    help='Number of residual blocks (CNN). (default: 4)')
+    n.add_argument('--dropout', type=float, default=0.0,
+                   help='Dropout rate for CNN heads. 0.3 = reference. (default: 0.0)')
 
     # Training
     t = parser.add_argument_group('training', 'Self-play and optimization')
@@ -123,6 +125,7 @@ def main():
             num_layers=args.num_layers,
             num_filters=args.num_filters,
             num_res_blocks=args.num_res_blocks,
+            dropout=args.dropout,
         ),
         training=TrainingConfig(
             lr=args.lr,

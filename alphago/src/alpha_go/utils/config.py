@@ -58,6 +58,9 @@ class NetworkConfig:
     num_res_blocks: int = 4
     """Number of residual blocks (CNN)."""
 
+    dropout: float = 0.0
+    """Dropout rate for CNN heads. 0.0 = no dropout, 0.3 = reference."""
+
 
 @dataclass
 class TrainingConfig:
