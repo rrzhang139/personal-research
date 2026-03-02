@@ -46,20 +46,31 @@ def serialize_model_state(model) -> tuple[bytes, dict]:
 
 
 def _reconstruct_model(weight_bytes: bytes, info: dict):
-    """Rebuild a model wrapper from serialized weights + info."""
+    """Rebuild a model wrapper from serialized weights + info.
+
+    Always reconstructs on CPU — MCTS self-play is CPU-bound (single-sample
+    forward passes), and GPU transfer overhead makes it slower. Training
+    uses the main process model on GPU separately.
+    """
     from ..neural_net.conv_net import ConvNetWrapper
     from ..neural_net.simple_net import SimpleNetWrapper
 
-    config = info['config']
-    if config.network_type == 'cnn':
-        model = ConvNetWrapper(
-            info['board_size'], info['action_size'], config,
-            lr=info['lr'], board_shape=info['board_shape'],
-        )
-    else:
-        model = SimpleNetWrapper(
-            info['board_size'], info['action_size'], config, lr=info['lr'],
-        )
+    # Force CPU device for worker models to avoid CUDA issues in subprocesses
+    _orig_cuda_available = torch.cuda.is_available
+    torch.cuda.is_available = lambda: False
+    try:
+        config = info['config']
+        if config.network_type == 'cnn':
+            model = ConvNetWrapper(
+                info['board_size'], info['action_size'], config,
+                lr=info['lr'], board_shape=info['board_shape'],
+            )
+        else:
+            model = SimpleNetWrapper(
+                info['board_size'], info['action_size'], config, lr=info['lr'],
+            )
+    finally:
+        torch.cuda.is_available = _orig_cuda_available
 
     state_dict = torch.load(io.BytesIO(weight_bytes), map_location='cpu', weights_only=True)
     model.net.load_state_dict(state_dict)
@@ -95,8 +106,12 @@ def _worker_init_two_models(
 
 
 def _get_mp_context():
-    """Get multiprocessing context: 'fork' on Linux (fast), 'spawn' on macOS (safe)."""
-    if sys.platform == 'linux':
+    """Get multiprocessing context.
+
+    'fork' on Linux without CUDA (fast — no re-import overhead).
+    'spawn' on macOS or when CUDA is initialized (CUDA can't survive fork).
+    """
+    if sys.platform == 'linux' and not torch.cuda.is_initialized():
         return mp.get_context('fork')
     return mp.get_context('spawn')
 
