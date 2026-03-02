@@ -15,10 +15,6 @@ import os
 import sys
 import time
 
-# Force CPU — GPU transfer overhead makes single-sample MCTS inference
-# 3-4x slower. Training is on CPU too; we reduce epochs to compensate.
-os.environ['CUDA_VISIBLE_DEVICES'] = ''
-
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
@@ -34,14 +30,15 @@ EXPERIMENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(EXPERIMENT_DIR, 'data')
 FIG_DIR = os.path.join(EXPERIMENT_DIR, 'figures')
 
-# All-CPU config. Cloud vCPUs are ~6x slower than Mac, but GPU single-sample
-# inference overhead is worse. CNN training is expensive on CPU, so use 2 epochs
-# (still enough for 25K augmented examples). MLP also uses 2 epochs for fairness.
-MCTS = MCTSConfig(num_simulations=50, nn_batch_size=8)
+# GPU config: sequential self-play with large VL batch for GPU utilization.
+# num_workers=1 avoids all multiprocessing/CUDA issues. nn_batch_size=32
+# batches leaf evaluations into single GPU calls (~1-2ms vs 50ms on CPU).
+# Training also on GPU (CNN step: ~1ms vs 55ms on CPU). Full 10 epochs.
+MCTS = MCTSConfig(num_simulations=50, nn_batch_size=32)
 TRAINING = TrainingConfig(
     num_iterations=25,
     games_per_iteration=100,
-    epochs_per_iteration=2,
+    epochs_per_iteration=10,
     batch_size=64,
     lr=0.001,
 )
