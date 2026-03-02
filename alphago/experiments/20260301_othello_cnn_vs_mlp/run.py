@@ -30,8 +30,9 @@ EXPERIMENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(EXPERIMENT_DIR, 'data')
 FIG_DIR = os.path.join(EXPERIMENT_DIR, 'figures')
 
-# Full baseline config with parallelism and VL batching.
-# On GPU, training is fast so we use the standard 10 epochs.
+# Sequential self-play with VL batching. Cloud vCPUs are ~6x slower than Mac,
+# and spawn context overhead (PyTorch+CUDA reimport per worker) is massive.
+# num_workers=1 avoids all pool overhead. GPU accelerates training only.
 MCTS = MCTSConfig(num_simulations=50, nn_batch_size=8)
 TRAINING = TrainingConfig(
     num_iterations=25,
@@ -41,7 +42,7 @@ TRAINING = TrainingConfig(
     lr=0.001,
 )
 ARENA = ArenaConfig(arena_games=40, update_threshold=0.55)
-NUM_WORKERS = 4
+NUM_WORKERS = 1
 
 MLP_NETWORK = NetworkConfig(
     network_type="mlp",
