@@ -86,7 +86,8 @@ cd /workspace/code/personal-research/uwlab/UWLab
 ### Registered Tasks
 | Task ID | Config | Use |
 |---------|--------|-----|
-| `OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-v0` | All 4 resets | Training (full) |
+| `OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-v0` | All 4 resets, uniform probs | Training (baseline) |
+| `OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-Adaptive-v0` | All 4 resets, adaptive zone curriculum | Training (adaptive) |
 | `OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-NearGoal-v0` | 2 near-goal resets | Training (near-goal) |
 | `OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-Play-v0` | ObjectAnywhereEEAnywhere only | Evaluation |
 
@@ -145,7 +146,25 @@ cd /workspace/code/personal-research/uwlab/UWLab
 
 ## Training Commands
 
-### From scratch with all 4 resets (original paper config)
+### Original Paper Baseline (4x GPU — the canonical reference run)
+Reproduces the exact original OmniReset paper config. Use this to verify code correctness and as the control for any experiments. 4x GPUs, 16384 envs/GPU, uniform [0.25, 0.25, 0.25, 0.25] reset probs, 40k iterations.
+```bash
+# In tmux on 4x RTX 4090 pod:
+bash scripts/train_omnireset_4gpu_baseline.sh
+# wandb run name: baseline_uniform_cube_4gpu
+# Task: OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-v0
+# PPO: lr=1e-4, γ=0.99, λ=0.95, clip=0.2, entropy=0.006, 32 steps/env, 5 epochs, 4 mini-batches
+```
+
+### Adaptive Zone-Based Curriculum (4x GPU)
+Same as baseline but with adaptive reset probability updates (3-zone: stuck/learning/mastered).
+```bash
+bash scripts/train_omnireset_4gpu_adaptive.sh
+# wandb run name: adaptive_zones_cube_4gpu
+# Task: OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-Adaptive-v0
+```
+
+### Single GPU (1x GPU, 4096 envs)
 ```bash
 bash scripts/train_omnireset_single_gpu.sh
 # or without --checkpoint to truly start from scratch
@@ -223,9 +242,12 @@ UWLab is pip-installed in editable mode via `./uwlab.sh --install`, so `import u
 **In personal-research (this repo):**
 | File | Description |
 |------|-------------|
-| `uwlab/scripts/train_omnireset_*.sh` | Launch scripts for training |
+| `uwlab/scripts/train_omnireset_4gpu_baseline.sh` | **Original paper baseline** (4x GPU, uniform probs) |
+| `uwlab/scripts/train_omnireset_4gpu_adaptive.sh` | Adaptive zone curriculum (4x GPU) |
+| `uwlab/scripts/train_omnireset_single_gpu.sh` | Single GPU training |
+| `uwlab/scripts/train_omnireset_near_goal.sh` | Near-goal only training |
 | `uwlab/scripts/eval_wandb.sh` | Eval + wandb video upload |
-| `uwlab/scripts/patch_adaptive.py` | Adaptive reset probability patch |
+| `uwlab/scripts/patch_adaptive.py` | Legacy adaptive patch (superseded by Adaptive-v0 task) |
 | `uwlab/sac_her/` | SAC + HER implementation (Phase 3) |
 
 **In UWLab fork (separate repo, gitignored):**
