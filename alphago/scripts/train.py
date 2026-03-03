@@ -55,8 +55,8 @@ def parse_args():
 
     # Network
     n = parser.add_argument_group('network', 'Neural network architecture')
-    n.add_argument('--network', type=str, default='mlp', choices=['mlp', 'cnn'],
-                   help='Network type: mlp or cnn (default: mlp)')
+    n.add_argument('--network', type=str, default='mlp', choices=['mlp', 'cnn', 'othellonet'],
+                   help='Network type: mlp, cnn, or othellonet (default: mlp)')
     n.add_argument('--hidden-size', type=int, default=128,
                    help='Hidden layer width (MLP). 32 works for ttt, 128+ for harder games (default: 128)')
     n.add_argument('--num-layers', type=int, default=4,
@@ -78,6 +78,10 @@ def parse_args():
                    help='Training passes over replay buffer per iteration (default: 10)')
     t.add_argument('--max-buffer-size', type=int, default=50000,
                    help='Replay buffer capacity. Older examples dropped (default: 50000)')
+    t.add_argument('--buffer-strategy', type=str, default='fifo', choices=['fifo', 'window'],
+                   help='Buffer strategy: fifo (fixed-size deque) or window (last N iters) (default: fifo)')
+    t.add_argument('--buffer-window', type=int, default=20,
+                   help='For window strategy: keep examples from last N iterations (default: 20)')
     t.add_argument('--num-iterations', type=int, default=25,
                    help='Total self-play/train/arena cycles (default: 25)')
     t.add_argument('--games-per-iteration', type=int, default=100,
@@ -132,6 +136,8 @@ def main():
             batch_size=args.batch_size,
             epochs_per_iteration=args.epochs_per_iteration,
             max_buffer_size=args.max_buffer_size,
+            buffer_strategy=args.buffer_strategy,
+            buffer_window=args.buffer_window,
             num_iterations=args.num_iterations,
             games_per_iteration=args.games_per_iteration,
             checkpoint_dir=args.checkpoint_dir,

@@ -65,6 +65,11 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
             config=_config_to_dict(config),
         )
 
+    # Buffer setup: FIFO deque or sliding window of per-iteration lists
+    use_window = config.training.buffer_strategy == "window"
+    if use_window:
+        iteration_history = []  # list of per-iteration example lists
+
     _print_header(config, num_workers)
     _print_table_header()
 
@@ -85,7 +90,14 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
             num_workers=num_workers,
             game_name=config.game,
         )
-        replay_buffer.extend(new_examples)
+        if use_window:
+            iteration_history.append(new_examples)
+            if len(iteration_history) > config.training.buffer_window:
+                iteration_history.pop(0)
+            training_examples = [ex for batch in iteration_history for ex in batch]
+        else:
+            replay_buffer.extend(new_examples)
+            training_examples = list(replay_buffer)
         t_self_play = time.time() - t_phase
 
         # 2. Train
@@ -93,7 +105,7 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
         new_model = best_model.clone()
         losses = train_on_examples(
             model=new_model,
-            examples=list(replay_buffer),
+            examples=training_examples,
             batch_size=config.training.batch_size,
             epochs=config.training.epochs_per_iteration,
         )
@@ -136,7 +148,7 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
         history['arena_win_rate'].append(win_rate)
         history['vs_random_win_rate'].append(vs_random)
         history['model_accepted'].append(accepted)
-        history['buffer_size'].append(len(replay_buffer))
+        history['buffer_size'].append(len(training_examples))
         history['self_play_outcomes'].append(sp_stats.outcomes_tuple)
         history['policy_entropy'].append(sp_stats.mean_policy_entropy)
         history['mean_root_value'].append(sp_stats.mean_root_value)
@@ -151,7 +163,7 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
             arena_stats=arena_stats,
             accepted=accepted,
             vs_random=vs_random,
-            buffer_size=len(replay_buffer),
+            buffer_size=len(training_examples),
             sp_stats=sp_stats,
             iter_time=iter_time,
         )
@@ -183,7 +195,7 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
                 'mcts/mean_root_value': sp_stats.mean_root_value,
                 'mcts/mean_search_depth': sp_stats.mean_search_depth,
                 # Infrastructure
-                'buffer_size': len(replay_buffer),
+                'buffer_size': len(training_examples),
                 'iter_time': iter_time,
                 # Phase timing
                 'time/self_play': t_self_play,

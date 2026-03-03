@@ -2,6 +2,7 @@
 
 from ..utils.config import NetworkConfig
 from .conv_net import ConvNetWrapper
+from .othello_net import OthelloNetWrapper
 from .simple_net import SimpleNetWrapper
 
 
@@ -10,11 +11,11 @@ def create_model(game, config: NetworkConfig, lr: float = 0.001):
 
     Args:
         game: Game instance (must implement get_board_size, get_action_size, get_board_shape).
-        config: NetworkConfig with network_type ('mlp' or 'cnn').
+        config: NetworkConfig with network_type ('mlp', 'cnn', or 'othellonet').
         lr: Learning rate for the optimizer.
 
     Returns:
-        SimpleNetWrapper or ConvNetWrapper.
+        SimpleNetWrapper, ConvNetWrapper, or OthelloNetWrapper.
     """
     board_size = game.get_board_size()
     action_size = game.get_action_size()
@@ -24,5 +25,8 @@ def create_model(game, config: NetworkConfig, lr: float = 0.001):
     elif config.network_type == "cnn":
         board_shape = game.get_board_shape()
         return ConvNetWrapper(board_size, action_size, config, lr=lr, board_shape=board_shape)
+    elif config.network_type == "othellonet":
+        board_shape = game.get_board_shape()
+        return OthelloNetWrapper(board_size, action_size, config, lr=lr, board_shape=board_shape)
     else:
-        raise ValueError(f"Unknown network_type '{config.network_type}'. Use 'mlp' or 'cnn'.")
+        raise ValueError(f"Unknown network_type '{config.network_type}'. Use 'mlp', 'cnn', or 'othellonet'.")

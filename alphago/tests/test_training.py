@@ -1,13 +1,16 @@
-"""Tests for self-play, trainer, and arena."""
+"""Tests for self-play, trainer, arena, and buffer strategies."""
 
 import numpy as np
 
 from alpha_go.games.tictactoe import TicTacToe
 from alpha_go.neural_net.simple_net import SimpleNetWrapper
 from alpha_go.training.arena import arena_compare, play_vs_random
+from alpha_go.training.pipeline import run_pipeline
 from alpha_go.training.self_play import self_play_game, generate_self_play_data
 from alpha_go.training.trainer import train_on_examples
-from alpha_go.utils.config import MCTSConfig, NetworkConfig
+from alpha_go.utils.config import (
+    AlphaZeroConfig, ArenaConfig, MCTSConfig, NetworkConfig, TrainingConfig,
+)
 
 
 def _make_model():
@@ -136,3 +139,47 @@ class TestParallelSelfPlay:
             num_workers=2, game_name='tictactoe',
         )
         assert 0.0 <= win_rate <= 1.0
+
+
+class TestWindowBuffer:
+
+    def test_window_buffer_keeps_last_n(self):
+        """Window buffer should keep only the last N iterations of data."""
+        import tempfile
+        import os
+
+        game = TicTacToe()
+        model = _make_model()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = AlphaZeroConfig(
+                mcts=MCTSConfig(num_simulations=5, dirichlet_epsilon=0.0),
+                network=NetworkConfig(hidden_size=32, num_layers=2),
+                training=TrainingConfig(
+                    num_iterations=5,
+                    games_per_iteration=5,
+                    epochs_per_iteration=1,
+                    batch_size=8,
+                    buffer_strategy="window",
+                    buffer_window=3,
+                    checkpoint_dir=tmpdir,
+                ),
+                arena=ArenaConfig(arena_games=4, update_threshold=0.55),
+                game='tictactoe',
+                seed=42,
+            )
+
+            history = run_pipeline(game, model, config)
+
+            # After 5 iters with window=3, buffer should hold only ~3 iters of data
+            # Each iter generates 5 games * ~9 moves * 8 augmentations ≈ 360 examples
+            # 3 iters ≈ 1080, 5 iters ≈ 1800. Buffer should be < 5 iters' worth.
+            final_buf = history['buffer_size'][-1]
+            iter4_buf = history['buffer_size'][3]  # after 4 iters (window=3 → 3 iters)
+
+            # After iter 4 (window full at 3), buffer should not grow further
+            # (each new iter replaces the oldest)
+            assert final_buf <= iter4_buf * 1.2, (
+                f"Buffer should stabilize after window fills. "
+                f"iter4={iter4_buf}, iter5={final_buf}"
+            )

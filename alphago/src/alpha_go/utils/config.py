@@ -76,7 +76,13 @@ class TrainingConfig:
     """Training epochs per iteration (passes over replay buffer)."""
 
     max_buffer_size: int = 50_000
-    """Maximum replay buffer size. Older games get dropped."""
+    """Maximum replay buffer size. Older games get dropped (FIFO strategy)."""
+
+    buffer_strategy: str = "fifo"
+    """Buffer strategy: 'fifo' (fixed-size deque) or 'window' (last N iterations)."""
+
+    buffer_window: int = 20
+    """For 'window' strategy: keep examples from the last N iterations."""
 
     num_iterations: int = 25
     """Number of self-play → train → arena cycles."""
