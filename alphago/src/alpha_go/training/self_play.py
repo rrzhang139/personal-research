@@ -85,7 +85,7 @@ def self_play_game(
             if terminal_value == 0:
                 outcome = 0
             else:
-                outcome = player  # player who just moved won
+                outcome = player if terminal_value > 0 else -player
 
             # Assign per-position values
             examples = []

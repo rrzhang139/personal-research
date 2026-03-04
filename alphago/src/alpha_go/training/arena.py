@@ -55,7 +55,7 @@ def play_arena_game(
             # value is from perspective of player who just moved
             if value == 0:
                 return 0  # draw
-            return player  # player who just moved won
+            return player if value > 0 else -player
 
         player = -player
 
@@ -231,7 +231,8 @@ def _worker_vs_random_game(args):
         if is_terminal:
             if value == 0:
                 return 'draw'
-            elif player == model_player:
+            winner = player if value > 0 else -player
+            if winner == model_player:
                 return 'win'
             return 'loss'
 
@@ -295,8 +296,10 @@ def _play_vs_random_sequential(
             if is_terminal:
                 if value == 0:
                     draws += 1
-                elif player == model_player:
-                    wins += 1  # model just moved and won
+                else:
+                    winner = player if value > 0 else -player
+                    if winner == model_player:
+                        wins += 1
                 break
 
             player = -player
