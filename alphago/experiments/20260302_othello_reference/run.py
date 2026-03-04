@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 """Experiment: Reference architecture (alpha-zero-general) on Othello 6x6.
 
-Previous ResNet CNN (512 filters, 4 res blocks) plateaued at 50-62% vs random
-after 54 iterations despite low training loss. Root causes:
-1. ResNet preserves spatial dims — reference uses plain CNN with shrinking dims
-   + large FC layers (1024, 512) with BatchNorm.
-2. FIFO deque buffer mixes stale data from early weak models. Reference uses
-   a sliding window of the last N iterations' games.
-
-This experiment ports the exact alpha-zero-general architecture + buffer strategy.
+Previous attempt with 25 sims + nn_batch_size=32 failed: all sims consumed in
+one batch → depth=1 tree → no real MCTS search. Research shows 6x6 Othello Elo
+plateaus at ~200 sims (AlphaDDA paper). With 200 sims and batch=32, we get
+~6 batches per move → proper tree depth (5-6 levels) + efficient GPU utilization.
 
 Config:
 - Network: OthelloNNet (plain CNN, 512 filters, 0.3 dropout)
 - Buffer: window strategy, keep last 20 iterations
-- 25 sims, 80 iters, 100 games/iter, 10 epochs, lr=0.001
+- 200 sims, 80 iters, 100 games/iter, 10 epochs, lr=0.001
 - nn_batch_size=32, num_workers=1, update_threshold=0.55
 """
 
@@ -43,7 +39,7 @@ def main():
 
     config = AlphaZeroConfig(
         mcts=MCTSConfig(
-            num_simulations=25,
+            num_simulations=200,
             nn_batch_size=32,
         ),
         network=NetworkConfig(
@@ -85,7 +81,7 @@ def main():
                 'window': 20,
             },
             'mcts': {
-                'num_simulations': 25,
+                'num_simulations': 200,
                 'nn_batch_size': 32,
             },
             'training': {
@@ -106,7 +102,7 @@ def main():
 
     print(f"\n{'#'*70}")
     print(f"#  OthelloNNet (reference arch) — 512f, dropout=0.3, window buffer")
-    print(f"#  80 iterations, 25 sims, 100 games/iter, nn_batch=32")
+    print(f"#  80 iterations, 200 sims, 100 games/iter, nn_batch=32")
     print(f"{'#'*70}")
 
     t0 = time.time()
