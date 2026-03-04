@@ -39,8 +39,8 @@ def main():
 
     config = AlphaZeroConfig(
         mcts=MCTSConfig(
-            num_simulations=200,
-            nn_batch_size=32,
+            num_simulations=25,
+            nn_batch_size=8,
         ),
         network=NetworkConfig(
             network_type="othellonet",
@@ -48,7 +48,7 @@ def main():
             dropout=0.3,
         ),
         training=TrainingConfig(
-            num_iterations=80,
+            num_iterations=25,
             games_per_iteration=100,
             epochs_per_iteration=10,
             batch_size=64,
@@ -81,8 +81,8 @@ def main():
                 'window': 20,
             },
             'mcts': {
-                'num_simulations': 200,
-                'nn_batch_size': 32,
+                'num_simulations': 25,
+                'nn_batch_size': 8,
             },
             'training': {
                 'num_iterations': 80,
@@ -102,7 +102,7 @@ def main():
 
     print(f"\n{'#'*70}")
     print(f"#  OthelloNNet (reference arch) — 512f, dropout=0.3, window buffer")
-    print(f"#  80 iterations, 200 sims, 100 games/iter, nn_batch=32")
+    print(f"#  25 iterations, 25 sims, 100 games/iter, nn_batch=8")
     print(f"{'#'*70}")
 
     t0 = time.time()
