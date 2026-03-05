@@ -308,14 +308,20 @@ tail -30 /workspace/exp_output.log
 exit
 SSHEOF
 
-# 6. Pull results back (from pod)
+# 6. Pull results back — MUST include .pt weights! (from pod)
 ssh -tt ... << 'SSHEOF'
 cd /workspace/code/personal-research && git add -f alphago/experiments/<exp>/ && git commit -m "results" && git push
 exit
 SSHEOF
+
+# 7. Pull locally (from local machine)
+cd personal-research && git pull
+# Verify weights are present:
+ls -la alphago/experiments/<exp>/data/**/*.pt
 ```
 
 **Key gotchas:**
+- **ALWAYS pull weights locally before terminating a pod.** Weights are expensive to recreate. `git add -f` is needed because `.pt` files may be gitignored.
 - **GPU + virtual loss**: With `--nn-batch-size 8+`, GPU can now help via batched forward passes. Without batching (batch=1), GPU transfer overhead makes it 3-4x SLOWER than CPU. Always use `--nn-batch-size 8` or higher with GPU.
 - `tmux` is NOT pre-installed on cheap pods — use `nohup` or install tmux first (`apt-get install -y tmux`)
 - Python buffers stdout when redirected to file — always use `python -u` (unbuffered)
@@ -333,15 +339,16 @@ Use the `/experiment` slash command:
 
 Creates a timestamped folder under `experiments/` with `config.json`, `data/`, `figures/`, and `report.md`.
 
-**After every experiment or implementation finishes, you MUST do both of these before moving on:**
+**After every experiment or implementation finishes, you MUST do ALL of these before moving on:**
 
-1. **Update `PROGRESS.md`** — append a row to the progress log table. Include: date, what was done, baseline, measured result, and notes with file paths / report links. This is the breadcrumb trail for the next agent. No exceptions.
-2. **Git commit and push** — stage the new/changed files and push so nothing is lost:
+1. **Pull weights and results locally** — if the experiment ran on a remote machine (RunPod, etc.), always pull back the trained model weights (`.pt` files), `history.json`, and plots BEFORE terminating the pod. Weights are irreplaceable — retraining wastes hours and money. Use `git push` from the pod, then `git pull` locally, or `scp` the files directly.
+2. **Update `PROGRESS.md`** — append a row to the progress log table. Include: date, what was done, baseline, measured result, and notes with file paths / report links. This is the breadcrumb trail for the next agent. No exceptions.
+3. **Git commit and push** — stage the new/changed files and push so nothing is lost:
    ```bash
    git add -A alphago/ && git commit -m "<short description>" && git push
    ```
 
-These two steps apply to implementations, experiments, and hypothesis results alike. If you skip them, the next session starts blind and work may be lost.
+These steps apply to implementations, experiments, and hypothesis results alike. If you skip them, the next session starts blind and work may be lost. **NEVER terminate a pod without first saving weights locally.**
 
 ## Reading Guide
 

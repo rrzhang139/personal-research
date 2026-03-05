@@ -1,0 +1,19 @@
+{
+  "experiment": "CNN vs MLP on Othello 6x6 (post-bugfix)",
+  "quick_mode": true,
+  "num_iterations": 2,
+  "games_per_iteration": 10,
+  "num_simulations": 25,
+  "architectures": {
+    "mlp": {
+      "hidden_size": 128,
+      "num_layers": 4
+    },
+    "othellonet": {
+      "num_filters": 512,
+      "dropout": 0.3,
+      "nn_batch_size": 8,
+      "buffer_strategy": "window"
+    }
+  }
+}
