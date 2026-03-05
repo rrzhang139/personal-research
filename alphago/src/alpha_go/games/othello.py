@@ -1,27 +1,11 @@
-"""Othello (Reversi) implementation — 6x6 board.
+"""Othello (Reversi) implementation — configurable board size (default 6x6).
 
-6x6 board for fast iteration. Pieces flip opponent discs when sandwiched.
+Pieces flip opponent discs when sandwiched.
 - 0 = empty, 1 = player 1 (X/Black), -1 = player -1 (O/White)
-- Actions 0-35 = board positions (row * 6 + col). Action 36 = pass.
+- Actions 0..N*N-1 = board positions (row * N + col). Action N*N = pass.
 - A player must pass when they have no legal placements.
 - Game ends when both players must pass (or board is full).
 - Winner = player with more pieces.
-
-Board layout:
-  0  1  2  3  4  5
-  6  7  8  9 10 11
- 12 13 14 15 16 17
- 18 19 20 21 22 23
- 24 25 26 27 28 29
- 30 31 32 33 34 35
-
-Initial state (center 4 squares):
-  . . . . . .
-  . . . . . .
-  . . O X . .
-  . . X O . .
-  . . . . . .
-  . . . . . .
 """
 
 from __future__ import annotations
@@ -30,6 +14,7 @@ import numpy as np
 
 from .base_game import Game
 
+# Module-level constants for backward compatibility (tests import these)
 SIZE = 6
 PASS_ACTION = SIZE * SIZE  # 36
 
@@ -41,56 +26,59 @@ DIRECTIONS = [(-1, -1), (-1, 0), (-1, 1),
 
 class Othello(Game):
 
+    def __init__(self, size: int = 6):
+        self.size = size
+        self.pass_action = size * size
+
     def get_initial_state(self) -> np.ndarray:
-        state = np.zeros(SIZE * SIZE, dtype=np.float32)
-        mid = SIZE // 2
-        # Standard Othello opening: white on main diagonal, black on anti-diagonal
-        state[(mid - 1) * SIZE + (mid - 1)] = -1  # (2,2) = O
-        state[(mid - 1) * SIZE + mid] = 1          # (2,3) = X
-        state[mid * SIZE + (mid - 1)] = 1           # (3,2) = X
-        state[mid * SIZE + mid] = -1                # (3,3) = O
+        n = self.size
+        state = np.zeros(n * n, dtype=np.float32)
+        mid = n // 2
+        state[(mid - 1) * n + (mid - 1)] = -1
+        state[(mid - 1) * n + mid] = 1
+        state[mid * n + (mid - 1)] = 1
+        state[mid * n + mid] = -1
         return state
 
     def get_next_state(self, state: np.ndarray, action: int, player: int) -> np.ndarray:
+        n = self.size
         new_state = state.copy()
-        if action == PASS_ACTION:
-            return new_state  # pass: board unchanged
+        if action == self.pass_action:
+            return new_state
 
-        board = new_state.reshape(SIZE, SIZE)
-        row, col = divmod(action, SIZE)
+        board = new_state.reshape(n, n)
+        row, col = divmod(action, n)
         board[row, col] = player
 
-        # Flip captured pieces
         for flip_r, flip_c in self._get_flips(board, row, col, player):
             board[flip_r, flip_c] = player
 
         return new_state
 
     def get_valid_moves(self, state: np.ndarray, player: int = 1) -> np.ndarray:
-        board = state.reshape(SIZE, SIZE)
-        valid = np.zeros(SIZE * SIZE + 1, dtype=np.float32)
+        n = self.size
+        board = state.reshape(n, n)
+        valid = np.zeros(n * n + 1, dtype=np.float32)
 
-        for r in range(SIZE):
-            for c in range(SIZE):
+        for r in range(n):
+            for c in range(n):
                 if board[r, c] == 0 and self._get_flips(board, r, c, player):
-                    valid[r * SIZE + c] = 1.0
+                    valid[r * n + c] = 1.0
 
-        # Pass is legal only when no placements exist
-        if valid[:SIZE * SIZE].sum() == 0:
-            valid[PASS_ACTION] = 1.0
+        if valid[:n * n].sum() == 0:
+            valid[self.pass_action] = 1.0
 
         return valid
 
     def check_terminal(self, state: np.ndarray, action: int, player: int = 1) -> tuple[bool, float]:
-        board = state.reshape(SIZE, SIZE)
+        n = self.size
+        board = state.reshape(n, n)
 
-        # Check if both players must pass
         p1_has_moves = self._has_any_move(board, 1)
         p2_has_moves = self._has_any_move(board, -1)
         board_full = np.all(board != 0)
 
         if not (p1_has_moves or p2_has_moves) or board_full:
-            # Game over — count pieces
             p1_count = np.sum(board == 1)
             p2_count = np.sum(board == -1)
 
@@ -99,41 +87,37 @@ class Othello(Game):
             elif p2_count > p1_count:
                 winner = -1
             else:
-                return True, 0.0  # draw
+                return True, 0.0
 
-            # Return value from perspective of player who just moved
             return True, 1.0 if winner == player else -1.0
 
         return False, 0.0
 
     def get_board_size(self) -> int:
-        return SIZE * SIZE  # 36
+        return self.size * self.size
 
     def get_board_shape(self) -> tuple[int, int]:
-        return (SIZE, SIZE)  # (6, 6)
+        return (self.size, self.size)
 
     def get_action_size(self) -> int:
-        return SIZE * SIZE + 1  # 37 (36 board + 1 pass)
+        return self.size * self.size + 1
 
     def get_canonical_state(self, state: np.ndarray, player: int) -> np.ndarray:
         return state * player
 
     def get_symmetries(self, state: np.ndarray, pi: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
-        """8 symmetries: 4 rotations x 2 reflections.
-
-        The pass action probability is preserved across all symmetries.
-        """
+        """8 symmetries: 4 rotations x 2 reflections."""
+        n = self.size
         symmetries = []
-        board = state.reshape(SIZE, SIZE)
-        board_pi = pi[:SIZE * SIZE].reshape(SIZE, SIZE)
-        pass_prob = pi[PASS_ACTION]
+        board = state.reshape(n, n)
+        board_pi = pi[:n * n].reshape(n, n)
+        pass_prob = pi[self.pass_action]
 
         for rotation in range(4):
             rb = np.rot90(board, rotation)
             rp = np.rot90(board_pi, rotation)
             sym_pi = np.append(rp.flatten(), pass_prob)
             symmetries.append((rb.flatten(), sym_pi))
-            # Add horizontal flip
             fb = np.fliplr(rb)
             fp = np.fliplr(rp)
             sym_pi_flip = np.append(fp.flatten(), pass_prob)
@@ -142,11 +126,12 @@ class Othello(Game):
         return symmetries
 
     def display(self, state: np.ndarray) -> str:
+        n = self.size
         symbols = {0: '.', 1: 'X', -1: 'O'}
-        board = state.reshape(SIZE, SIZE)
-        rows = ['  ' + ' '.join(str(c) for c in range(SIZE))]
-        for r in range(SIZE):
-            rows.append(f'{r} ' + ' '.join(symbols[int(board[r, c])] for c in range(SIZE)))
+        board = state.reshape(n, n)
+        rows = ['  ' + ' '.join(str(c) for c in range(n))]
+        for r in range(n):
+            rows.append(f'{r} ' + ' '.join(symbols[int(board[r, c])] for c in range(n)))
         p1 = int(np.sum(board == 1))
         p2 = int(np.sum(board == -1))
         rows.append(f'X:{p1} O:{p2}')
@@ -154,40 +139,39 @@ class Othello(Game):
 
     # --- Internal helpers ---
 
-    @staticmethod
-    def _get_flips(board: np.ndarray, row: int, col: int, player: int) -> list[tuple[int, int]]:
+    def _get_flips(self, board: np.ndarray, row: int, col: int, player: int) -> list[tuple[int, int]]:
         """Return list of (row, col) positions that would be flipped by placing player at (row, col)."""
+        n = self.size
         opponent = -player
         all_flips = []
 
         for dr, dc in DIRECTIONS:
             flips = []
             r, c = row + dr, col + dc
-            while 0 <= r < SIZE and 0 <= c < SIZE and board[r, c] == opponent:
+            while 0 <= r < n and 0 <= c < n and board[r, c] == opponent:
                 flips.append((r, c))
                 r += dr
                 c += dc
-            # Must end on our own piece to capture
-            if flips and 0 <= r < SIZE and 0 <= c < SIZE and board[r, c] == player:
+            if flips and 0 <= r < n and 0 <= c < n and board[r, c] == player:
                 all_flips.extend(flips)
 
         return all_flips
 
-    @staticmethod
-    def _has_any_move(board: np.ndarray, player: int) -> bool:
+    def _has_any_move(self, board: np.ndarray, player: int) -> bool:
         """Check if player has any legal placement (not counting pass)."""
+        n = self.size
         opponent = -player
-        for r in range(SIZE):
-            for c in range(SIZE):
+        for r in range(n):
+            for c in range(n):
                 if board[r, c] != 0:
                     continue
                 for dr, dc in DIRECTIONS:
                     nr, nc = r + dr, c + dc
                     found_opponent = False
-                    while 0 <= nr < SIZE and 0 <= nc < SIZE and board[nr, nc] == opponent:
+                    while 0 <= nr < n and 0 <= nc < n and board[nr, nc] == opponent:
                         found_opponent = True
                         nr += dr
                         nc += dc
-                    if found_opponent and 0 <= nr < SIZE and 0 <= nc < SIZE and board[nr, nc] == player:
+                    if found_opponent and 0 <= nr < n and 0 <= nc < n and board[nr, nc] == player:
                         return True
         return False

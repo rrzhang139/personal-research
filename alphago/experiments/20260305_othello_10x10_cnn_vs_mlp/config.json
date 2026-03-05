@@ -1,0 +1,32 @@
+{
+  "experiment": "CNN vs MLP on 10x10 Othello",
+  "hypothesis": "CNN's spatial inductive bias becomes advantageous on 10x10 where spatial patterns (corners, edges, adjacency) matter more than on 6x6. MLP dominated 40-0 on 6x6 with sharper priors, but 10x10 has 101 actions (vs 37) making sharp priors harder for flat input.",
+  "board_size": 10,
+  "shared": {
+    "num_simulations": 100,
+    "num_iterations": 25,
+    "games_per_iteration": 100,
+    "epochs_per_iteration": 10,
+    "arena_games": 40,
+    "update_threshold": 0.55,
+    "nn_batch_size": 8,
+    "seed": 42
+  },
+  "architectures": {
+    "mlp": {
+      "network_type": "mlp",
+      "hidden_size": 256,
+      "num_layers": 4,
+      "buffer_strategy": "fifo"
+    },
+    "othellonet": {
+      "network_type": "othellonet",
+      "num_filters": 512,
+      "dropout": 0.3,
+      "buffer_strategy": "window",
+      "buffer_window": 20
+    }
+  },
+  "head_to_head_games": 40,
+  "reference": "20260304_othello_cnn_vs_mlp (6x6, 50 sims)"
+}

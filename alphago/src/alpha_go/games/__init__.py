@@ -8,6 +8,9 @@ GAMES = {
     'tictactoe': TicTacToe,
     'connect4': ConnectFour,
     'othello': Othello,
+    'othello6': lambda: Othello(size=6),
+    'othello8': lambda: Othello(size=8),
+    'othello10': lambda: Othello(size=10),
 }
 
 

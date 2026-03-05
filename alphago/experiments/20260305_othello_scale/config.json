@@ -1,0 +1,28 @@
+{
+  "experiment": "CNN vs MLP at scale: sim sweep + 10x10",
+  "quick_mode": true,
+  "part1": {
+    "sim_counts": [
+      25,
+      50
+    ],
+    "h2h_games": 10,
+    "weights_from": "20260304_othello_cnn_vs_mlp"
+  },
+  "part2": {
+    "board_size": 10,
+    "num_iterations": 2,
+    "games_per_iteration": 10,
+    "num_simulations": 25,
+    "mlp": {
+      "hidden_size": 256,
+      "num_layers": 4
+    },
+    "othellonet": {
+      "num_filters": 512,
+      "dropout": 0.3,
+      "nn_batch_size": 8,
+      "buffer_strategy": "window"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "25": {
+    "sims": 25,
+    "cnn_wins": 0,
+    "mlp_wins": 10,
+    "draws": 0,
+    "cnn_win_rate": 0.0,
+    "time": 6.730062246322632
+  },
+  "50": {
+    "sims": 50,
+    "cnn_wins": 0,
+    "mlp_wins": 10,
+    "draws": 0,
+    "cnn_win_rate": 0.0,
+    "time": 12.148037195205688
+  }
+}

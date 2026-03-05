@@ -423,6 +423,79 @@ class TestOthelloDisplay:
         assert 'X:2 O:2' in d
 
 
+class TestOthelloConfigurableSize:
+    """Tests for non-default board sizes (8x8, 10x10)."""
+
+    @pytest.mark.parametrize("size", [8, 10])
+    def test_board_dimensions(self, size):
+        game = Othello(size=size)
+        assert game.get_board_size() == size * size
+        assert game.get_board_shape() == (size, size)
+        assert game.get_action_size() == size * size + 1
+
+    @pytest.mark.parametrize("size", [8, 10])
+    def test_initial_state(self, size):
+        game = Othello(size=size)
+        state = game.get_initial_state()
+        assert state.shape == (size * size,)
+        assert np.sum(state != 0) == 4
+        board = state.reshape(size, size)
+        mid = size // 2
+        assert board[mid - 1, mid - 1] == -1
+        assert board[mid - 1, mid] == 1
+        assert board[mid, mid - 1] == 1
+        assert board[mid, mid] == -1
+
+    @pytest.mark.parametrize("size", [8, 10])
+    def test_valid_moves_initial(self, size):
+        game = Othello(size=size)
+        state = game.get_initial_state()
+        valid = game.get_valid_moves(state, player=1)
+        assert valid.shape == (size * size + 1,)
+        valid_actions = np.where(valid[:size * size] > 0)[0]
+        assert len(valid_actions) == 4
+        assert valid[size * size] == 0  # pass not valid
+
+    @pytest.mark.parametrize("size", [8, 10])
+    def test_random_game_terminates(self, size):
+        game = Othello(size=size)
+        state = game.get_initial_state()
+        player = 1
+        for _ in range(size * size * 2):
+            valid = game.get_valid_moves(state, player)
+            valid_actions = np.where(valid > 0)[0]
+            action = np.random.choice(valid_actions)
+            state = game.get_next_state(state, action, player)
+            is_terminal, _ = game.check_terminal(state, action, player)
+            if is_terminal:
+                return
+            player = -player
+        pytest.fail(f"Game did not terminate on {size}x{size} board")
+
+    @pytest.mark.parametrize("size", [8, 10])
+    def test_symmetries(self, size):
+        game = Othello(size=size)
+        state = game.get_initial_state()
+        pi = np.ones(size * size + 1, dtype=np.float32) / (size * size + 1)
+        syms = game.get_symmetries(state, pi)
+        assert len(syms) == 8
+        for sym_state, sym_pi in syms:
+            assert sym_state.shape == (size * size,)
+            assert sym_pi.shape == (size * size + 1,)
+
+    def test_get_game_variants(self):
+        g8 = get_game('othello8')
+        assert g8.get_board_size() == 64
+        g10 = get_game('othello10')
+        assert g10.get_board_size() == 100
+
+    def test_default_backward_compatible(self):
+        """Default Othello() still produces 6x6."""
+        game = Othello()
+        assert game.size == 6
+        assert game.get_board_size() == 36
+
+
 class TestOthelloMCTSIntegration:
 
     def test_mcts_initial_state(self):

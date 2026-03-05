@@ -34,7 +34,9 @@ def parse_args():
     # Game
     g = parser.add_argument_group('game')
     g.add_argument('--game', type=str, default='tictactoe',
-                   help='Game to train on: tictactoe, connect4 (default: tictactoe)')
+                   help='Game to train on: tictactoe, connect4, othello, othello8, othello10 (default: tictactoe)')
+    g.add_argument('--board-size', type=int, default=None,
+                   help='Override board size for Othello (e.g., 6, 8, 10). Ignored for non-Othello games.')
     g.add_argument('--seed', type=int, default=42,
                    help='Random seed for reproducibility (default: 42)')
 
@@ -154,7 +156,11 @@ def main():
     )
 
     # Setup game and model
-    game = get_game(config.game)
+    if args.board_size is not None and 'othello' in config.game:
+        from alpha_go.games.othello import Othello
+        game = Othello(size=args.board_size)
+    else:
+        game = get_game(config.game)
     model = create_model(game, config.network, lr=config.training.lr)
 
     # Run — pipeline handles all logging
