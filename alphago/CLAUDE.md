@@ -322,10 +322,11 @@ ls -la alphago/experiments/<exp>/data/**/*.pt
 
 **Key gotchas:**
 - **ALWAYS pull weights locally before terminating a pod.** Weights are expensive to recreate. `git add -f` is needed because `.pt` files may be gitignored.
+- **Large weights (>100MB)**: GitHub rejects files >100MB. OthelloNNet 512f on 10x10 = 304MB. Options: (1) compress with `gzip` before push, (2) use Git LFS, (3) reduce num_filters. **Set up git config + credentials on pod BEFORE training starts** so push works without scrambling: `git config user.email/name` + `git remote set-url origin https://<TOKEN>@github.com/...`. Reset URL after push.
 - **GPU + virtual loss**: With `--nn-batch-size 8+`, GPU can now help via batched forward passes. Without batching (batch=1), GPU transfer overhead makes it 3-4x SLOWER than CPU. Always use `--nn-batch-size 8` or higher with GPU.
 - `tmux` is NOT pre-installed on cheap pods — use `nohup` or install tmux first (`apt-get install -y tmux`)
 - Python buffers stdout when redirected to file — always use `python -u` (unbuffered)
-- RunPod SSH gateway requires heredoc (`<< 'SSHEOF'`) — passing commands as args is ignored
+- RunPod SSH gateway requires heredoc (`<< 'SSHEOF'`) — passing commands as args is ignored. **SCP/SFTP do NOT work** through the gateway — use `git push` or pipe via `ssh -tt ... cat`.
 - Terminate pod when done to avoid idle storage charges ($0.005/hr)
 - Cloud vCPUs are much slower than Mac for single-threaded Python — MLP Othello baseline: 16.7m local vs 97m on pod
 
