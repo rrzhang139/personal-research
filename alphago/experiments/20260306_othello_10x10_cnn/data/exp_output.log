@@ -1,0 +1,28 @@
+
+######################################################################
+#  Training: OthelloNNet on 10x10 Othello
+#  25 iters, 100 sims, 100 games/iter
+#  512 filters, dropout=0.3, window buffer, nn_batch=8
+######################################################################
+
+  AlphaZero — othello10
+  Network: 4x128 MLP  |  MCTS: 100 sims, c_puct=1.0  |  LR: 0.001
+  Changed from default:
+    mcts.num_simulations: 25 -> 100
+    mcts.nn_batch_size: 1 -> 8
+    network.network_type: mlp -> othellonet
+    network.num_filters: 64 -> 512
+    network.dropout: 0.0 -> 0.3
+    training.buffer_strategy: fifo -> window
+    training.checkpoint_dir: checkpoints -> /workspace/code/personal-research/alphago/experiments/20260306_othello_10x10_cnn/data/othellonet
+    game: tictactoe -> othello10
+
+Iter    Loss     pi      v      Arena      vsRand  H(pi)  Depth   Time
+──────────────────────────────────────────────────────────────────────
+ 1/25  3.059  2.693  0.366  20W/0D/20L   -    80%   0.28    3.0  1440.1s
+ 2/25  2.866  2.513  0.352   0W/0D/40L   -    85%   0.28    3.0  1644.8s
+ 3/25  2.820  2.457  0.364  20W/0D/20L   -    70%   0.28    3.0  1840.5s
+ 4/25  2.794  2.431  0.363  40W/0D/0L   +   100%   0.28    3.0  2032.2s
+ 5/25  1.260  1.093  0.167  40W/0D/0L   +    89%   0.21    5.3  2256.2s
+ 6/25  0.978  0.826  0.152  20W/0D/20L   -    95%   0.20    5.8  2442.7s
+ 7/25  1.158  0.978  0.180  20W/0D/20L   -    91%   0.20    5.8  2655.3s

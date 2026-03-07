@@ -1,0 +1,16 @@
+{
+  "experiment": "OthelloNNet CNN on 10x10 Othello",
+  "board_size": 10,
+  "num_simulations": 100,
+  "num_iterations": 25,
+  "games_per_iteration": 100,
+  "architecture": {
+    "network_type": "othellonet",
+    "num_filters": 512,
+    "dropout": 0.3,
+    "nn_batch_size": 8,
+    "buffer_strategy": "window",
+    "buffer_window": 20
+  },
+  "quick_mode": false
+}
