@@ -74,7 +74,7 @@ def main():
         training=TrainingConfig(
             num_iterations=n_iters,
             games_per_iteration=n_games,
-            buffer_strategy='window', buffer_window=20,
+            
             checkpoint_dir=os.path.join(DATA_DIR, 'othellonet'),
         ),
         arena=ArenaConfig(arena_games=40, update_threshold=0.55),
