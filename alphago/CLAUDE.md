@@ -271,6 +271,37 @@ A living catalog of tunable knobs. Each row is something you can experiment with
 - KataGo innovations (playout cap randomization, auxiliary targets)
 - Gumbel AlphaZero (Sequential Halving — provably good at low sim counts)
 
+## Weights & Biases
+
+- **Project**: https://wandb.ai/rzhang139/alphazero
+- **Entity**: `rzhang139`
+- **Weight storage**: Use W&B Artifacts for all model weights (preferred over Git LFS for files >10MB)
+
+**Uploading weights** (in experiment scripts or training pipeline):
+```python
+artifact = wandb.Artifact('model-name', type='model')
+artifact.add_file('path/to/best.pt', name='best.pt')
+wandb.log_artifact(artifact)
+```
+
+**Downloading weights** (for inference/eval):
+```python
+api = wandb.Api()
+artifact = api.artifact('rzhang139/alphazero/model-name:latest')
+artifact_dir = artifact.download('/tmp/weights')
+model.load(os.path.join(artifact_dir, 'best.pt'))
+```
+
+**Available artifacts**:
+| Artifact | Game | Architecture | vs Random |
+|----------|------|-------------|-----------|
+| `tictactoe-mlp-baseline` | TTT 3x3 | MLP 4x128 | 95-100% |
+| `connect4-mlp-baseline` | C4 6x7 | MLP 4x128 | 100% |
+| `othello6-mlp-baseline` | Othello 6x6 | MLP 4x128 | 100% |
+| `othello6-mlp-experiment` | Othello 6x6 | MLP 4x128 | 100% |
+| `othello10-mlp-experiment` | Othello 10x10 | MLP 4x256 | 94% peak |
+| `othello10-cnn-experiment` | Othello 10x10 | OthelloNNet 512f | 100% |
+
 ## Running on GPU (RunPod)
 
 For experiments that take >10 min on CPU (Othello, larger games, CNN networks), use a cheap RunPod pod.
