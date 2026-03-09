@@ -322,8 +322,19 @@ ls -la alphago/experiments/<exp>/data/**/*.pt
 
 **Key gotchas:**
 - **ALWAYS pull weights locally before terminating a pod.** Weights are expensive to recreate. `git add -f` is needed because `.pt` files may be gitignored.
-- **Large weights (>100MB)**: GitHub rejects files >100MB. OthelloNNet 512f on 10x10 = 304MB. Options: (1) compress with `gzip` before push, (2) use Git LFS, (3) reduce num_filters. **Set up git config + credentials on pod BEFORE training starts** so push works without scrambling: `git config user.email/name` + `git remote set-url origin https://<TOKEN>@github.com/...`. Reset URL after push.
+- **Large weights (>100MB)**: GitHub rejects files >100MB without LFS. OthelloNNet 512f on 10x10 = 304MB. **Git LFS is set up** — `.pt` files are tracked via `.gitattributes`. On the pod, install `git-lfs` (`apt-get install -y git-lfs && git lfs install`) before pushing.
+- **Pod setup for push**: Configure git credentials BEFORE training starts. Use `GIT_LFS_SKIP_SMUDGE=1 git clone` to avoid downloading existing LFS objects (just pointers). Set `git remote set-url origin https://<TOKEN>@github.com/...` for auth. Reset URL after push.
+- **Auto-push pattern**: Wrap training in a bash script that auto-pushes weights after completion:
+  ```bash
+  nohup bash -c '
+    python -u experiment/run.py > /workspace/exp_output.log 2>&1
+    cd /workspace/code/personal-research
+    git add -f alphago/experiments/<exp>/
+    git commit -m "results" && git push >> /workspace/exp_output.log 2>&1
+  ' > /dev/null 2>&1 &
+  ```
 - **GPU + virtual loss**: With `--nn-batch-size 8+`, GPU can now help via batched forward passes. Without batching (batch=1), GPU transfer overhead makes it 3-4x SLOWER than CPU. Always use `--nn-batch-size 8` or higher with GPU.
+- **Window buffer slows down**: With `buffer_strategy=window`, training time per iteration grows as the buffer accumulates data. On 10x10 OthelloNNet: iter 1 took 25min, iter 16 took 100min. Factor this into time estimates.
 - `tmux` is NOT pre-installed on cheap pods — use `nohup` or install tmux first (`apt-get install -y tmux`)
 - Python buffers stdout when redirected to file — always use `python -u` (unbuffered)
 - RunPod SSH gateway requires heredoc (`<< 'SSHEOF'`) — passing commands as args is ignored. **SCP/SFTP do NOT work** through the gateway — use `git push` or pipe via `ssh -tt ... cat`.

@@ -134,4 +134,4 @@ Track your currently active instances here. Update when creating/destroying inst
 
 | Provider | Instance ID | GPUs | SSH Address | Status |
 |----------|-------------|------|-------------|--------|
-| RunPod | `4n8e4qprui8ypr` | 4x RTX 4090 | `4n8e4qprui8ypr-64411cfb@ssh.runpod.io` | Active |
+| (none) | — | — | — | — |
