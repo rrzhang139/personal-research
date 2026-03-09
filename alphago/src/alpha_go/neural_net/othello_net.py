@@ -31,11 +31,20 @@ from ..utils.config import NetworkConfig
 class OthelloNNet(nn.Module):
     """Plain CNN with shrinking spatial dims and large FC layers."""
 
-    def __init__(self, board_shape: tuple[int, int], action_size: int, config: NetworkConfig):
+    def __init__(self, board_shape: tuple, action_size: int, config: NetworkConfig):
         super().__init__()
         self.board_shape = board_shape
         self.action_size = action_size
-        rows, cols = board_shape
+
+        # Handle 2-tuple (rows, cols) or 3-tuple (channels, rows, cols)
+        if len(board_shape) == 3:
+            in_channels, rows, cols = board_shape
+        else:
+            rows, cols = board_shape
+            in_channels = 1
+        self.in_channels = in_channels
+        self.rows = rows
+        self.cols = cols
         nf = config.num_filters
         dropout = config.dropout
 
@@ -45,7 +54,7 @@ class OthelloNNet(nn.Module):
         )
 
         # Conv layers: first two preserve spatial, last two shrink
-        self.conv1 = nn.Conv2d(1, nf, 3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, nf, 3, stride=1, padding=1)
         self.conv2 = nn.Conv2d(nf, nf, 3, stride=1, padding=1)
         self.conv3 = nn.Conv2d(nf, nf, 3, stride=1, padding=0)
         self.conv4 = nn.Conv2d(nf, nf, 3, stride=1, padding=0)
@@ -81,8 +90,7 @@ class OthelloNNet(nn.Module):
         Returns:
             (log_policy, value): log_policy shape (B, action_size), value shape (B, 1).
         """
-        rows, cols = self.board_shape
-        h = x.view(-1, 1, rows, cols)
+        h = x.view(-1, self.in_channels, self.rows, self.cols)
 
         h = F.relu(self.bn1(self.conv1(h)))
         h = F.relu(self.bn2(self.conv2(h)))

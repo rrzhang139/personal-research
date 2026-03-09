@@ -34,9 +34,9 @@ def parse_args():
     # Game
     g = parser.add_argument_group('game')
     g.add_argument('--game', type=str, default='tictactoe',
-                   help='Game to train on: tictactoe, connect4, othello, othello8, othello10 (default: tictactoe)')
+                   help='Game to train on: tictactoe, connect4, othello, othello8, othello10, go, go9, go13, go19 (default: tictactoe)')
     g.add_argument('--board-size', type=int, default=None,
-                   help='Override board size for Othello (e.g., 6, 8, 10). Ignored for non-Othello games.')
+                   help='Override board size for Othello (6,8,10) or Go (9,13,19).')
     g.add_argument('--seed', type=int, default=42,
                    help='Random seed for reproducibility (default: 42)')
 
@@ -159,6 +159,9 @@ def main():
     if args.board_size is not None and 'othello' in config.game:
         from alpha_go.games.othello import Othello
         game = Othello(size=args.board_size)
+    elif args.board_size is not None and 'go' in config.game:
+        from alpha_go.games.go import Go
+        game = Go(size=args.board_size)
     else:
         game = get_game(config.game)
     model = create_model(game, config.network, lr=config.training.lr)

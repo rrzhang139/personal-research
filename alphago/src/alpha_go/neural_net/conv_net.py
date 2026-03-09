@@ -43,16 +43,25 @@ class ResBlock(nn.Module):
 class ConvNet(nn.Module):
     """Residual CNN with separate policy and value heads."""
 
-    def __init__(self, board_shape: tuple[int, int], action_size: int, config: NetworkConfig):
+    def __init__(self, board_shape: tuple, action_size: int, config: NetworkConfig):
         super().__init__()
-        self.board_shape = board_shape
         self.action_size = action_size
         self.config = config
-        rows, cols = board_shape
+
+        # Handle 2-tuple (rows, cols) or 3-tuple (channels, rows, cols)
+        if len(board_shape) == 3:
+            in_channels, rows, cols = board_shape
+        else:
+            rows, cols = board_shape
+            in_channels = 1
+        self.in_channels = in_channels
+        self.rows = rows
+        self.cols = cols
+        self.board_shape = board_shape
         nf = config.num_filters
 
         # Initial convolution
-        self.initial_conv = nn.Conv2d(1, nf, 3, padding=1, bias=False)
+        self.initial_conv = nn.Conv2d(in_channels, nf, 3, padding=1, bias=False)
         self.initial_bn = nn.BatchNorm2d(nf)
 
         # Residual tower
@@ -86,9 +95,8 @@ class ConvNet(nn.Module):
         Returns:
             (log_policy, value): log_policy shape (B, action_size), value shape (B, 1).
         """
-        rows, cols = self.board_shape
-        # Reshape flat input to (B, 1, rows, cols)
-        h = x.view(-1, 1, rows, cols)
+        # Reshape flat input to (B, C, rows, cols)
+        h = x.view(-1, self.in_channels, self.rows, self.cols)
 
         # Initial conv
         h = F.relu(self.initial_bn(self.initial_conv(h)))
