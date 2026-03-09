@@ -1,0 +1,17 @@
+{
+  "6x6": {
+    "0": {"sims": 0, "cnn_wins": 0, "mlp_wins": 40, "draws": 0, "cnn_win_rate": 0.0, "time": 2.1},
+    "1": {"sims": 1, "cnn_wins": 0, "mlp_wins": 0, "draws": 40, "cnn_win_rate": 0.5, "time": 4.4},
+    "5": {"sims": 5, "cnn_wins": 0, "mlp_wins": 40, "draws": 0, "cnn_win_rate": 0.0, "time": 9.9},
+    "25": {"sims": 25, "cnn_wins": 0, "mlp_wins": 40, "draws": 0, "cnn_win_rate": 0.0, "time": 38.9},
+    "50": {"sims": 50, "cnn_wins": 0, "mlp_wins": 40, "draws": 0, "cnn_win_rate": 0.0, "time": 68.4},
+    "100": {"sims": 100, "cnn_wins": 0, "mlp_wins": 40, "draws": 0, "cnn_win_rate": 0.0, "time": 98.3},
+    "200": {"sims": 200, "cnn_wins": 20, "mlp_wins": 0, "draws": 20, "cnn_win_rate": 0.75, "time": 11001.1}
+  },
+  "10x10": {
+    "0": {"sims": 0, "cnn_wins": 40, "mlp_wins": 0, "draws": 0, "cnn_win_rate": 1.0, "time": 771.3},
+    "1": {"sims": 1, "cnn_wins": 20, "mlp_wins": 20, "draws": 0, "cnn_win_rate": 0.5, "time": 1125.8},
+    "100": {"sims": 100, "cnn_wins": 40, "mlp_wins": 0, "draws": 0, "cnn_win_rate": 1.0, "time": null, "note": "from previous head-to-head experiment"}
+  },
+  "note": "10x10 sims 5-200 stopped early — each point takes hours on CPU. 100 sims from prior experiment."
+}

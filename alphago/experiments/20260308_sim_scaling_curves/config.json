@@ -1,0 +1,27 @@
+{
+  "experiment": "Sim scaling curves: CNN vs MLP at varying search depth",
+  "sim_counts": [
+    0,
+    1,
+    5,
+    25,
+    50,
+    100,
+    200
+  ],
+  "num_games": 40,
+  "boards": [
+    "6x6",
+    "10x10"
+  ],
+  "weights": {
+    "6x6": {
+      "mlp": "best.pt",
+      "cnn": "best.pt"
+    },
+    "10x10": {
+      "mlp": "best.pt",
+      "cnn": "best.pt"
+    }
+  }
+}
