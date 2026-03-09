@@ -1,41 +1,39 @@
 Pod has been restarted (stopped then started again). The persistent volume `/workspace/` survives but container packages (tmux, libglu, etc.) are wiped.
 
-SSH address: check providers/runpod.md for `Current Instance` section, it may have changed if this is a new pod.
+SSH address: check providers/runpod.md for `Current Instance` section.
 
-Steps to recover:
-1. SSH into the pod and run `restart.sh`:
+## Timing: ~2 min total, 1 SSH call
+
+| Phase | Duration | Timeout |
+|-------|----------|---------|
+| restart.sh (apt-get, symlinks, claude) | ~30s | 120s |
+| git pull | ~5s | — |
+| Verify (python, nvidia-smi) | ~5s | — |
+
+## Do everything in ONE SSH call (timeout 120s):
 ```
 ssh -tt -i ~/.ssh/runpod <SSH_ADDRESS> << 'SSHEOF'
 source /workspace/.bashrc_pod 2>/dev/null
 bash /workspace/code/personal-research/runpod/restart.sh
-exit
-SSHEOF
-```
 
-2. Verify the environment works:
-```
-ssh -tt -i ~/.ssh/runpod <SSH_ADDRESS> << 'SSHEOF'
+# Pull latest code
+cd /workspace/code/personal-research && git pull
+cd uwlab/UWLab && git pull origin main 2>/dev/null || true
+cd /workspace/code/personal-research
+
+# Verify
 source /workspace/.bashrc_pod 2>/dev/null
 python3 -c "import os; print(f'WANDB_API_KEY: {os.environ.get(\"WANDB_API_KEY\", \"NOT SET\")[:8]}...')"
-nvidia-smi --query-gpu=memory.used,memory.total --format=csv
+nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader
 tmux ls 2>/dev/null || echo "tmux installed OK (no sessions)"
+echo "=== POD RESTART COMPLETE ==="
 exit
 SSHEOF
 ```
 
-3. Pull latest code:
-```
-ssh -tt -i ~/.ssh/runpod <SSH_ADDRESS> << 'SSHEOF'
-source /workspace/.bashrc_pod 2>/dev/null
-cd /workspace/code/personal-research && git pull
-cd uwlab/UWLab && git pull origin main
-exit
-SSHEOF
-```
+Report GPU status and any issues to the user.
 
-4. Report what you found to the user (GPU status, env vars, any issues).
-
-IMPORTANT reminders:
-- `.bashrc_pod` uses `set -a` to export `.env` vars. If this is missing, wandb/HF auth will fail in Python.
-- `/workspace/venv/` may not exist (legacy) — don't use `set -e` when sourcing `.bashrc_pod`
-- tmux and libglu1-mesa need reinstalling after every restart (restart.sh handles this)
+## IMPORTANT
+- `.bashrc_pod` uses `set -a` to export `.env` vars. If missing, wandb/HF auth fails in Python.
+- tmux and libglu1-mesa are reinstalled by restart.sh (container disk wiped on stop).
+- `/workspace/venv/` may not exist (legacy path) — `.bashrc_pod` may warn, that's OK.

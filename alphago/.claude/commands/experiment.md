@@ -2,6 +2,8 @@ Run an AlphaZero experiment based on the user's description: $ARGUMENTS
 
 ## Instructions
 
+If you are using GPUs, refer to claude.md in /Users/richardzhang/workspace/personal-research
+
 You are running an experiment for the AlphaZero research testbed. Follow these steps exactly:
 
 ### 1. Create experiment directory
