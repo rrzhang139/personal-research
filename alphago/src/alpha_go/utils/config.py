@@ -38,6 +38,16 @@ class MCTSConfig:
     this many leaf positions per batch, evaluates in one forward pass.
     Default 8 is a good balance for CPU; GPU benefits from larger batches."""
 
+    playout_cap_prob: float = 1.0
+    """Probability of a 'full' search per move (KataGo playout cap randomization).
+    1.0 = all moves use full num_simulations (disabled, default).
+    0.125 = 12.5% of moves get full search (recorded for training),
+    87.5% get cheap search (not recorded). Games finish ~4-5x faster."""
+
+    playout_cap_cheap_fraction: float = 0.25
+    """Cheap search uses num_simulations * this fraction.
+    E.g. with num_simulations=200 and fraction=0.15, cheap = 30 sims."""
+
 
 @dataclass
 class NetworkConfig:

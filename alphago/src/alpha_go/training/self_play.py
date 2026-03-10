@@ -40,16 +40,31 @@ def self_play_game(
 ) -> tuple[list[tuple[np.ndarray, np.ndarray, float]], int, dict]:
     """Play one game of self-play, returning training examples, outcome, and diagnostics.
 
+    Supports KataGo-style playout cap randomization when mcts_config.playout_cap_prob < 1.0:
+    each move randomly gets 'full' search (recorded for training) or 'cheap' search (not recorded).
+    Games finish much faster while training data quality is maintained.
+
     Returns:
         (examples, outcome, diag): examples is list of (canonical_state, mcts_policy, value).
         outcome: 1 = player 1 won, -1 = player 2 won, 0 = draw.
         diag: dict with diagnostic values (empty if collect_diagnostics=False).
     """
-    mcts = MCTS(game, model, mcts_config)
+    full_sims = mcts_config.num_simulations
+    use_playout_cap = mcts_config.playout_cap_prob < 1.0
+    cheap_sims = max(1, int(full_sims * mcts_config.playout_cap_cheap_fraction))
+
+    # Create two MCTS configs if using playout cap
+    if use_playout_cap:
+        from dataclasses import replace
+        cheap_config = replace(mcts_config, num_simulations=cheap_sims)
+        mcts_full = MCTS(game, model, mcts_config)
+        mcts_cheap = MCTS(game, model, cheap_config)
+    else:
+        mcts_full = MCTS(game, model, mcts_config)
 
     state = game.get_initial_state()
     player = 1
-    trajectory = []  # (canonical_state, player, mcts_policy)
+    trajectory = []  # (canonical_state, player, mcts_policy, is_full)
     move_count = 0
     root_values = []
     policy_entropies = []
@@ -58,16 +73,20 @@ def self_play_game(
     while True:
         canonical = game.get_canonical_state(state, player)
 
+        # Decide full vs cheap search
+        is_full = (not use_playout_cap) or (np.random.random() < mcts_config.playout_cap_prob)
+        mcts = mcts_full if is_full else mcts_cheap
+
         # Use temperature: exploratory early, greedy late
-        # NOTE: set on the MCTS instance's copy, not the shared config
         if move_count < mcts_config.temp_threshold:
             temp = 1.0
         else:
             temp = 0.01  # nearly greedy
         mcts.temperature = temp
 
-        pi, diag = mcts.search(state, player, collect_diagnostics=collect_diagnostics)
-        trajectory.append((canonical.copy(), player, pi.copy()))
+        do_diag = collect_diagnostics and is_full
+        pi, diag = mcts.search(state, player, collect_diagnostics=do_diag)
+        trajectory.append((canonical.copy(), player, pi.copy(), is_full))
 
         if diag is not None:
             root_values.append(diag.root_value)
@@ -87,9 +106,11 @@ def self_play_game(
             else:
                 outcome = player if terminal_value > 0 else -player
 
-            # Assign per-position values
+            # Assign per-position values — only full-search positions if using playout cap
             examples = []
-            for canonical_state, traj_player, traj_pi in trajectory:
+            for canonical_state, traj_player, traj_pi, traj_full in trajectory:
+                if use_playout_cap and not traj_full:
+                    continue  # skip cheap-search positions
                 if traj_player == player:
                     v = terminal_value
                 else:

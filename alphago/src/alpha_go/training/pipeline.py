@@ -111,21 +111,26 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
         )
         t_train = time.time() - t_phase
 
-        # 3. Arena
+        # 3. Arena (skip if arena_games == 0 — always accept, like AlphaZero)
         t_phase = time.time()
-        win_rate, arena_stats = arena_compare(
-            game=game,
-            new_model=new_model,
-            old_model=best_model,
-            mcts_config=config.mcts,
-            num_games=config.arena.arena_games,
-            num_workers=num_workers,
-            game_name=config.game,
-        )
+        if config.arena.arena_games > 0:
+            win_rate, arena_stats = arena_compare(
+                game=game,
+                new_model=new_model,
+                old_model=best_model,
+                mcts_config=config.mcts,
+                num_games=config.arena.arena_games,
+                num_workers=num_workers,
+                game_name=config.game,
+            )
+            accepted = win_rate >= config.arena.update_threshold
+        else:
+            win_rate = 1.0
+            arena_stats = {'new_wins': 0, 'old_wins': 0, 'draws': 0}
+            accepted = True
         t_arena = time.time() - t_phase
 
         # 4. Accept or reject
-        accepted = win_rate >= config.arena.update_threshold
         if accepted:
             best_model = new_model
             best_model.save(os.path.join(config.training.checkpoint_dir, 'best.pt'))
