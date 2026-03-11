@@ -106,6 +106,10 @@ class NetworkConfig:
     """Use batch normalization in residual blocks. KataGo found removing BN
     gives 1.6x training speedup with equal or better performance."""
 
+    use_se: bool = False
+    """Use Squeeze-and-Excitation blocks in residual tower (Leela Zero, KataGo).
+    Adds channel-wise attention with ~2% more parameters. Improves feature quality."""
+
 
 @dataclass
 class TrainingConfig:

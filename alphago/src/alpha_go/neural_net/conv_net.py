@@ -22,20 +22,36 @@ import torch.nn.functional as F
 from ..utils.config import NetworkConfig
 
 
-class ResBlock(nn.Module):
-    """Residual block: conv -> [BN] -> ReLU -> conv -> [BN] -> skip -> ReLU."""
+class SEBlock(nn.Module):
+    """Squeeze-and-Excitation: channel-wise attention (Leela Zero, KataGo)."""
 
-    def __init__(self, num_filters: int, use_bn: bool = True):
+    def __init__(self, channels: int, reduction: int = 4):
+        super().__init__()
+        self.fc1 = nn.Linear(channels, channels // reduction)
+        self.fc2 = nn.Linear(channels // reduction, channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        se = x.mean(dim=(2, 3))  # (B, C)
+        se = F.relu(self.fc1(se))
+        se = torch.sigmoid(self.fc2(se))
+        return x * se.unsqueeze(-1).unsqueeze(-1)
+
+
+class ResBlock(nn.Module):
+    """Residual block: conv -> [BN] -> ReLU -> conv -> [BN] -> [SE] -> skip -> ReLU."""
+
+    def __init__(self, num_filters: int, use_bn: bool = True, use_se: bool = False):
         super().__init__()
         self.conv1 = nn.Conv2d(num_filters, num_filters, 3, padding=1, bias=not use_bn)
         self.bn1 = nn.BatchNorm2d(num_filters) if use_bn else nn.Identity()
         self.conv2 = nn.Conv2d(num_filters, num_filters, 3, padding=1, bias=not use_bn)
         self.bn2 = nn.BatchNorm2d(num_filters) if use_bn else nn.Identity()
+        self.se = SEBlock(num_filters) if use_se else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         residual = x
         out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
+        out = self.se(self.bn2(self.conv2(out)))
         out = F.relu(out + residual)
         return out
 
@@ -66,8 +82,9 @@ class ConvNet(nn.Module):
         self.initial_bn = nn.BatchNorm2d(nf) if use_bn else nn.Identity()
 
         # Residual tower
+        use_se = getattr(config, 'use_se', False)
         self.res_blocks = nn.Sequential(
-            *[ResBlock(nf, use_bn=use_bn) for _ in range(config.num_res_blocks)]
+            *[ResBlock(nf, use_bn=use_bn, use_se=use_se) for _ in range(config.num_res_blocks)]
         )
 
         # Policy head

@@ -67,6 +67,7 @@ def main():
             num_res_blocks=4,
             global_pool_value=True,  # KataGo-style
             use_batch_norm=False,  # KataGo: 1.6x speedup
+            use_se=True,  # Squeeze-and-Excitation (Leela Zero, KataGo)
         ),
         training=TrainingConfig(
             lr=0.002,
