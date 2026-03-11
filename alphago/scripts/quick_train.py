@@ -34,6 +34,7 @@ def main():
     parser.add_argument("--eval-games", type=int, default=0, help="vsRandom games (0=skip)")
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--fpu-reduction", type=float, default=0.0)
+    parser.add_argument("--lr-schedule", type=str, default="constant", choices=["constant", "cosine"])
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -62,6 +63,7 @@ def main():
             lr=args.lr,
             batch_size=64,
             epochs_per_iteration=args.epochs,
+            lr_schedule=args.lr_schedule,
             num_iterations=args.iters,
             games_per_iteration=args.games,
             max_buffer_size=200000,

@@ -43,20 +43,32 @@ class MCTS:
         self.temperature = config.temperature  # can be overridden per-move
         self._fpu_reduction = getattr(config, 'fpu_reduction', 0.0)
 
-    def search(self, state: np.ndarray, player: int, collect_diagnostics: bool = False) -> tuple[np.ndarray, SearchDiagnostics | None]:
+    def search(self, state: np.ndarray, player: int, collect_diagnostics: bool = False,
+               reuse_root: 'MCTSNode | None' = None) -> tuple[np.ndarray, SearchDiagnostics | None]:
         """Run MCTS from the given state and return action probabilities.
+
+        Args:
+            reuse_root: If provided, reuse this node as root (tree reuse).
+                Must already be expanded and have state set.
 
         Dispatches to sequential or batched search based on config.nn_batch_size.
         """
-        root = MCTSNode(state=state, player=player)
+        is_fresh_root = True
+        if reuse_root is not None and reuse_root.is_expanded:
+            root = reuse_root
+            # Detach from parent to prevent memory leaks
+            root.parent = None
+            is_fresh_root = False
+        else:
+            root = MCTSNode(state=state, player=player)
+            # Get initial policy for root expansion
+            canonical = self.game.get_canonical_state(state, player)
+            policy, _ = self.model.predict(canonical)
+            root.expand(self.game, policy)
 
-        # Get initial policy for root expansion
-        canonical = self.game.get_canonical_state(state, player)
-        policy, _ = self.model.predict(canonical)
-        root.expand(self.game, policy)
-
-        # Add Dirichlet noise to root for exploration
-        self._add_noise(root)
+        # Add Dirichlet noise only to fresh roots (not reused ones)
+        if is_fresh_root:
+            self._add_noise(root)
 
         # Run simulations
         nn_batch = getattr(self.config, 'nn_batch_size', 1)
@@ -65,7 +77,20 @@ class MCTS:
         else:
             max_depth = self._run_sequential(root)
 
+        # Store root for potential tree reuse
+        self._last_root = root
+
         return self._extract_policy(root, max_depth, collect_diagnostics)
+
+    def get_subtree(self, action: int) -> 'MCTSNode | None':
+        """Get the child subtree for the given action (for tree reuse)."""
+        root = getattr(self, '_last_root', None)
+        if root is None:
+            return None
+        child = root.children.get(action)
+        if child is not None:
+            child.ensure_state(self.game)
+        return child
 
     def _run_sequential(self, root: MCTSNode) -> int:
         """Original sequential MCTS: one NN eval per simulation."""
