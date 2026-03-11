@@ -86,6 +86,12 @@ class TrainingConfig:
     weight_decay: float = 0.0
     """Weight decay (L2 regularization) for optimizer. KataGo uses 1e-4."""
 
+    lr_schedule: str = "constant"
+    """Learning rate schedule: 'constant' or 'cosine'."""
+
+    lr_min: float = 1e-5
+    """Minimum learning rate for cosine schedule."""
+
     batch_size: int = 64
     """Minibatch size for training."""
 

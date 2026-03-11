@@ -103,6 +103,17 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
         # 2. Train
         t_phase = time.time()
         new_model = best_model.clone()
+
+        # Apply learning rate schedule
+        lr_schedule = getattr(config.training, 'lr_schedule', 'constant')
+        if lr_schedule == 'cosine':
+            import math
+            lr_min = getattr(config.training, 'lr_min', 1e-5)
+            progress = (iteration - 1) / max(1, config.training.num_iterations - 1)
+            lr = lr_min + 0.5 * (config.training.lr - lr_min) * (1 + math.cos(math.pi * progress))
+            for param_group in new_model.optimizer.param_groups:
+                param_group['lr'] = lr
+
         losses = train_on_examples(
             model=new_model,
             examples=training_examples,

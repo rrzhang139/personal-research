@@ -92,7 +92,7 @@ class MCTSNode:
             action_priors = valid_moves / valid_moves.sum()
 
         for action in range(game.get_action_size()):
-            if valid_moves[action] > 0:
+            if valid_moves[action] > 0 and action_priors[action] > 1e-6:
                 child = MCTSNode(
                     state=None,
                     player=-self.player,

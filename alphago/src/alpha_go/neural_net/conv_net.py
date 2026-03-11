@@ -141,7 +141,8 @@ class ConvNetWrapper:
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr, weight_decay=self.weight_decay)
 
     def predict(self, state: np.ndarray) -> tuple[np.ndarray, float]:
-        self.net.eval()
+        if self.net.training:
+            self.net.eval()
         with torch.no_grad():
             x = torch.FloatTensor(state).unsqueeze(0).to(self.net.device)
             log_pi, v = self.net(x)
@@ -151,7 +152,8 @@ class ConvNetWrapper:
 
     def predict_batch(self, states: list[np.ndarray]) -> tuple[list[np.ndarray], list[float]]:
         """Batch prediction for multiple states (used by virtual loss MCTS)."""
-        self.net.eval()
+        if self.net.training:
+            self.net.eval()
         with torch.no_grad():
             x = torch.FloatTensor(np.array(states)).to(self.net.device)
             log_pi, v = self.net(x)
