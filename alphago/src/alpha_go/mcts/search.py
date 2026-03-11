@@ -90,10 +90,11 @@ class MCTS:
         root = getattr(self, '_last_root', None)
         if root is None:
             return None
-        child = root.children.get(action)
-        if child is not None:
-            child.ensure_state(self.game)
-        return child
+        for child in root.children:
+            if child.action == action:
+                child.ensure_state(self.game)
+                return child
+        return None
 
     def _run_sequential(self, root: MCTSNode) -> int:
         """Original sequential MCTS: one NN eval per simulation."""
@@ -206,8 +207,11 @@ class MCTS:
     def _extract_policy(self, root: MCTSNode, max_depth: int, collect_diagnostics: bool) -> tuple[np.ndarray, SearchDiagnostics | None]:
         """Extract visit-count policy and diagnostics from the root."""
         action_probs = np.zeros(self.game.get_action_size(), dtype=np.float32)
-        for action, child in root.children.items():
-            action_probs[action] = child.N
+        if root._child_actions is not None:
+            action_probs[root._child_actions[:root._num_children]] = root._child_N[:root._num_children]
+        else:
+            for child in root.children:
+                action_probs[child.action] = child.N
 
         # Apply temperature
         if action_probs.sum() > 0:
@@ -223,7 +227,7 @@ class MCTS:
         if collect_diagnostics:
             root_value = 0.0
             if root.children:
-                best_child = max(root.children.values(), key=lambda c: c.N)
+                best_child = max(root.children, key=lambda c: c.N)
                 root_value = -best_child.Q
 
             pi = action_probs[action_probs > 0]
@@ -242,9 +246,14 @@ class MCTS:
         if self.config.dirichlet_epsilon == 0:
             return
 
-        actions = list(root.children.keys())
-        noise = np.random.dirichlet([self.config.dirichlet_alpha] * len(actions))
+        n = root._num_children
+        if n == 0:
+            return
+        noise = np.random.dirichlet(np.full(n, self.config.dirichlet_alpha))
         eps = self.config.dirichlet_epsilon
 
-        for i, action in enumerate(actions):
-            root.children[action].P = (1 - eps) * root.children[action].P + eps * noise[i]
+        # Update both child objects and parallel array
+        for i in range(n):
+            new_p = (1 - eps) * root.children[i].P + eps * noise[i]
+            root.children[i].P = new_p
+            root._child_P[i] = new_p

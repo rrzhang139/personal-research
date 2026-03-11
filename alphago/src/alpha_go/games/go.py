@@ -63,6 +63,14 @@ class Go(Game):
             if c < n - 1:
                 nbrs.append(idx + 1)
             neighbors[idx] = nbrs
+        # Also build a padded neighbor array for vectorized access
+        # _nbr_arr[idx] = [n0, n1, n2, n3] padded with -1
+        self._nbr_arr = np.full((self.n2, 4), -1, dtype=np.int32)
+        self._nbr_count = np.zeros(self.n2, dtype=np.int32)
+        for idx, nbrs in neighbors.items():
+            for j, nbr in enumerate(nbrs):
+                self._nbr_arr[idx, j] = nbr
+            self._nbr_count[idx] = len(nbrs)
         return neighbors
 
     # ------------------------------------------------------------------
@@ -229,14 +237,25 @@ class Go(Game):
         board = self._get_current_board(state)
         ko = self._get_ko_point(state)
 
-        for idx in range(self.n2):
-            if board[idx] != 0:
-                continue
+        # Find empty intersections (candidates)
+        empty = np.where(board == 0)[0]
+
+        # Vectorized fast-path: check if any neighbor is empty
+        # For each empty cell, if any neighbor is also empty -> valid (has liberty)
+        for idx_val in empty:
+            idx = int(idx_val)
             if idx == ko:
                 continue
-            if self._is_suicide(board, idx, player):
-                continue
-            valid[idx] = 1.0
+            # Fast path: any empty neighbor = has a liberty, not suicide
+            has_liberty = False
+            for nbr in self._neighbors[idx]:
+                if board[nbr] == 0:
+                    has_liberty = True
+                    break
+            if has_liberty:
+                valid[idx] = 1.0
+            elif not self._is_suicide(board, idx, player):
+                valid[idx] = 1.0
 
         # Pass is always valid
         valid[self.pass_action] = 1.0
@@ -319,14 +338,16 @@ class Go(Game):
         If player == 1: return planes as-is (just the NN portion).
         If player == -1: swap planes 0-7 <-> 8-15, flip color plane.
         """
+        if player == 1:
+            return state[:self.nn_input_size].copy()
+        # player == -1: need to swap planes
         planes = state[:self.nn_input_size].reshape(self.num_planes, self.n2).copy()
-        if player == -1:
-            # Swap player 1 and player -1 history planes
-            p1_copy = planes[P1_PLANES].copy()
-            planes[P1_PLANES] = planes[P2_PLANES]
-            planes[P2_PLANES] = p1_copy
-            # Flip color plane
-            planes[COLOR_PLANE] = 1.0 - planes[COLOR_PLANE]
+        # Swap player 1 and player -1 history planes
+        p1_copy = planes[P1_PLANES].copy()
+        planes[P1_PLANES] = planes[P2_PLANES]
+        planes[P2_PLANES] = p1_copy
+        # Flip color plane
+        planes[COLOR_PLANE] = 1.0 - planes[COLOR_PLANE]
         return planes.flatten()
 
     def get_symmetries(self, state: np.ndarray, pi: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
