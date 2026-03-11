@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Go 9x9 v2 training — all optimizations + architectural improvements.
+"""Go 9x9 v2 training — proven arch + KataGo MCTS params + batch=64.
 
 Key changes from v1 (20260311_go9_optimized):
-  - nn_batch_size=64 (1.66x faster on CUDA, benchmarked on A4000)
-  - global_pool_value=True (KataGo-style value head)
-  - cosine LR schedule (better convergence for long runs)
-  - 100 iterations × 100 games (10,000 total games — 2x more training)
-  - All code optimizations: lazy expansion, FPU, suicide fast-path
+  - nn_batch_size=64 (1.66x faster on CUDA)
+  - KataGo MCTS params: dirichlet_alpha=0.12, c_puct=1.0, temp_decay, FPU
+  - cosine LR schedule
+  - 100 iterations × 100 games (10,000 total games)
+  - Standard CNN arch (with BN, no SE) — SE+no-BN caused exploding loss (14M)
 
-Warm-start from v1's best.pt (partially compatible — will skip value_fc1 mismatch).
+Warm-start from playout_cap best.pt.
 
-Expected time on RTX A4000: ~8 hours (with batch=64 speedup)
-Expected cost: ~$1.36 at $0.17/hr
+Expected time on RTX 4090: ~4-5 hours
+Expected cost: ~$1.00 at $0.20/hr
 """
 import json
 import os
@@ -65,9 +65,6 @@ def main():
             network_type="cnn",
             num_filters=128,
             num_res_blocks=4,
-            global_pool_value=True,  # KataGo-style
-            use_batch_norm=False,  # KataGo: 1.6x speedup
-            use_se=True,  # Squeeze-and-Excitation (Leela Zero, KataGo)
         ),
         training=TrainingConfig(
             lr=0.002,
@@ -94,33 +91,16 @@ def main():
         json.dump(asdict(config), f, indent=2)
     print(f"Config saved to {config_path}")
 
-    # Create model with new architecture
+    # Create model (standard arch, same as v1)
     model = create_model(game, config.network, lr=config.training.lr, weight_decay=config.training.weight_decay)
     print(f"Device: {model.net.device}")
-    print(f"Global pool value: {config.network.global_pool_value}")
 
-    # Try warm-starting (may fail on value_fc1 mismatch due to global pooling)
+    # Warm-start from previous best
     for warm_path in WARM_STARTS:
         if os.path.exists(warm_path):
-            try:
-                model.load(warm_path)
-                print(f"Warm-started from {warm_path}")
-                break
-            except RuntimeError as e:
-                if "size mismatch" in str(e):
-                    print(f"Partial warm-start from {warm_path} (skipping mismatched layers)")
-                    import torch
-                    checkpoint = torch.load(warm_path, map_location=model.net.device, weights_only=True)
-                    model_dict = model.net.state_dict()
-                    # Load compatible layers only
-                    compatible = {k: v for k, v in checkpoint['model'].items()
-                                  if k in model_dict and model_dict[k].shape == v.shape}
-                    model_dict.update(compatible)
-                    model.net.load_state_dict(model_dict)
-                    print(f"  Loaded {len(compatible)}/{len(checkpoint['model'])} layers")
-                    break
-                else:
-                    print(f"Error loading {warm_path}: {e}")
+            model.load(warm_path)
+            print(f"Warm-started from {warm_path}")
+            break
     else:
         print("WARNING: No warm-start weights found, training from scratch")
 
