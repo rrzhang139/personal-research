@@ -77,7 +77,9 @@ class ConvNet(nn.Module):
         # Value head
         self.value_conv = nn.Conv2d(nf, 1, 1, bias=False)
         self.value_bn = nn.BatchNorm2d(1)
-        self.value_fc1 = nn.Linear(rows * cols, 64)
+        self.global_pool_value = getattr(config, 'global_pool_value', False)
+        value_input_size = rows * cols + (2 * nf if self.global_pool_value else 0)
+        self.value_fc1 = nn.Linear(value_input_size, 64)
         self.value_fc2 = nn.Linear(64, 1)
 
         # Dropout (applied in policy and value heads)
@@ -115,9 +117,15 @@ class ConvNet(nn.Module):
         p = self.dropout(p)
         log_pi = F.log_softmax(self.policy_fc(p), dim=1)
 
-        # Value head
-        v = F.relu(self.value_bn(self.value_conv(h)))
-        v = v.view(v.size(0), -1)
+        # Value head (optional global pooling)
+        v_spatial = F.relu(self.value_bn(self.value_conv(h)))
+        v_spatial = v_spatial.view(v_spatial.size(0), -1)
+        if self.global_pool_value:
+            v_avg = h.mean(dim=(2, 3))  # (B, nf)
+            v_max = h.amax(dim=(2, 3))  # (B, nf)
+            v = torch.cat([v_spatial, v_avg, v_max], dim=1)
+        else:
+            v = v_spatial
         v = self.dropout(v)
         v = F.relu(self.value_fc1(v))
         v = self.dropout(v)

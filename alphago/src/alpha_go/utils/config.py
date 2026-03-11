@@ -75,6 +75,10 @@ class NetworkConfig:
     dropout: float = 0.0
     """Dropout rate for CNN heads. 0.0 = no dropout, 0.3 = reference."""
 
+    global_pool_value: bool = False
+    """Add global avg+max pooling features to value head (KataGo-style).
+    Improves position evaluation but incompatible with older checkpoints."""
+
 
 @dataclass
 class TrainingConfig:
