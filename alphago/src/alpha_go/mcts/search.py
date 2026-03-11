@@ -42,6 +42,7 @@ class MCTS:
         self.config = config
         self.temperature = config.temperature  # can be overridden per-move
         self._fpu_reduction = getattr(config, 'fpu_reduction', 0.0)
+        self._c_puct_base = getattr(config, 'c_puct_base', 0.0)
 
     def search(self, state: np.ndarray, player: int, collect_diagnostics: bool = False,
                reuse_root: 'MCTSNode | None' = None) -> tuple[np.ndarray, SearchDiagnostics | None]:
@@ -102,7 +103,7 @@ class MCTS:
 
             # SELECT: walk down tree picking best PUCT child
             while not node.is_leaf():
-                node = node.select_child(self.config.c_puct, self._fpu_reduction)
+                node = node.select_child(self.config.c_puct, self._fpu_reduction, self._c_puct_base)
                 depth += 1
 
             max_depth = max(max_depth, depth)
@@ -150,7 +151,7 @@ class MCTS:
                 depth = 0
 
                 while not node.is_leaf():
-                    node = node.select_child(self.config.c_puct, self._fpu_reduction)
+                    node = node.select_child(self.config.c_puct, self._fpu_reduction, self._c_puct_base)
                     depth += 1
 
                 max_depth = max(max_depth, depth)

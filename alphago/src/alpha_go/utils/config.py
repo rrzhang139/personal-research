@@ -52,6 +52,10 @@ class MCTSConfig:
     """First Play Urgency reduction. Unvisited children get Q = parent_Q - fpu_reduction.
     0.0 = disabled (original AlphaZero). KataGo uses ~0.25. Focuses search on promising moves."""
 
+    c_puct_base: float = 0.0
+    """Log-based c_puct scaling: effective_c = c_puct * log((parent_N + c_puct_base + 1) / c_puct_base).
+    0.0 = disabled (constant c_puct). AlphaZero uses 19652. Reduces exploration as visit count grows."""
+
 
 @dataclass
 class NetworkConfig:

@@ -33,10 +33,13 @@ class MCTSNode:
     def is_leaf(self) -> bool:
         return not self.is_expanded
 
-    def select_child(self, c_puct: float, fpu_reduction: float = 0.0) -> 'MCTSNode':
+    def select_child(self, c_puct: float, fpu_reduction: float = 0.0, c_puct_base: float = 0.0) -> 'MCTSNode':
         """Select the child with the highest PUCT score.
 
         PUCT(s, a) = Q(s, a) + c_puct * P(s, a) * sqrt(N(s)) / (1 + N(s, a))
+
+        With c_puct_base > 0, c_puct is scaled logarithmically (AlphaZero):
+        effective_c = c_puct * log((N + base + 1) / base)
 
         Q is from the perspective of the player at this node.
         For unvisited children (N=0), use FPU: parent's value - fpu_reduction.
@@ -45,9 +48,13 @@ class MCTSNode:
         best_child = None
         sqrt_parent = np.sqrt(self.N)
 
+        # Dynamic c_puct (AlphaZero/KataGo log scaling)
+        if c_puct_base > 0:
+            c_puct = c_puct * (np.log((self.N + c_puct_base + 1) / c_puct_base) + 1)
+
         # FPU: unvisited children get parent's value minus a reduction
         if fpu_reduction > 0.0 and self.N > 0:
-            fpu_value = self.Q - fpu_reduction  # parent's Q from parent perspective = self.Q
+            fpu_value = self.Q - fpu_reduction
         else:
             fpu_value = 0.0
 
@@ -55,7 +62,6 @@ class MCTSNode:
             if child.N == 0:
                 exploit = fpu_value
             else:
-                # Q is stored from the child's perspective, negate for parent's view
                 exploit = -child.Q
             explore = c_puct * child.P * sqrt_parent / (1 + child.N)
             score = exploit + explore
