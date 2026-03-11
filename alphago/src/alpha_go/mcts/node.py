@@ -91,16 +91,27 @@ class MCTSNode:
         # Sparse iteration: only legal moves with sufficient prior
         actions = np.nonzero((valid_moves > 0) & (action_priors > 1e-6))[0]
 
+        # Batch-convert numpy→Python (much faster than per-element int()/float())
+        action_list = actions.tolist()
+        prior_list = action_priors[actions].tolist()
+
+        next_player = -self.player
+        _new = object.__new__
+        _cls = MCTSNode
         children = []
-        for action in actions:
-            child = MCTSNode(
-                state=None,
-                player=-self.player,
-                parent=self,
-                action=int(action),
-                prior=float(action_priors[action]),
-            )
-            children.append(child)
+        _append = children.append
+        for i in range(len(action_list)):
+            child = _new(_cls)
+            child.state = None
+            child.player = next_player
+            child.parent = self
+            child.action = action_list[i]
+            child.N = 0
+            child.W = 0.0
+            child.P = prior_list[i]
+            child.children = []
+            child.is_expanded = False
+            _append(child)
 
         self.children = children
         self.is_expanded = True

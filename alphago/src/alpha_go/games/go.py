@@ -47,10 +47,14 @@ class Go(Game):
         self.pass_action = self.n2  # last action index = pass
         self._neighbors = self._build_neighbors()
 
-    def _build_neighbors(self) -> dict[int, list[int]]:
-        """Precompute adjacency for all intersections (4-connected)."""
+    def _build_neighbors(self) -> list[tuple[int, ...]]:
+        """Precompute adjacency for all intersections (4-connected).
+
+        Returns a list (indexed by position) of tuples of neighbor indices.
+        Tuples are used instead of lists for faster iteration in hot loops.
+        """
         n = self.size
-        neighbors = {}
+        neighbors = []
         for idx in range(self.n2):
             r, c = divmod(idx, n)
             nbrs = []
@@ -62,15 +66,10 @@ class Go(Game):
                 nbrs.append(idx - 1)
             if c < n - 1:
                 nbrs.append(idx + 1)
-            neighbors[idx] = nbrs
-        # Also build a padded neighbor array for vectorized access
-        # _nbr_arr[idx] = [n0, n1, n2, n3] padded with -1
-        self._nbr_arr = np.full((self.n2, 4), -1, dtype=np.int32)
-        self._nbr_count = np.zeros(self.n2, dtype=np.int32)
-        for idx, nbrs in neighbors.items():
-            for j, nbr in enumerate(nbrs):
-                self._nbr_arr[idx, j] = nbr
-            self._nbr_count[idx] = len(nbrs)
+            neighbors.append(tuple(nbrs))
+        # Pre-allocated work arrays for flood fill (reused across calls)
+        self._visited = bytearray(self.n2)
+        self._stack = [0] * self.n2
         return neighbors
 
     # ------------------------------------------------------------------
@@ -109,44 +108,112 @@ class Go(Game):
     # Group / liberty helpers
     # ------------------------------------------------------------------
 
-    def _find_group(self, board: np.ndarray, idx: int) -> tuple[set[int], set[int]]:
-        """Flood-fill from idx. Return (group stones, liberties)."""
-        color = board[idx]
-        group = set()
-        liberties = set()
-        stack = [idx]
-        while stack:
-            pos = stack.pop()
-            if pos in group:
-                continue
-            group.add(pos)
-            for nbr in self._neighbors[pos]:
-                if board[nbr] == color and nbr not in group:
-                    stack.append(nbr)
-                elif board[nbr] == 0:
-                    liberties.add(nbr)
-        return group, liberties
+    def _find_group(self, board: np.ndarray, idx: int) -> tuple[list[int], int]:
+        """Flood-fill from idx. Return (group stone list, liberty count).
 
-    def _remove_group(self, board: np.ndarray, group: set[int]):
-        """Remove all stones in group from board."""
-        for idx in group:
-            board[idx] = 0.0
+        Uses pre-allocated bytearray + stack for speed (no set allocations).
+        """
+        color = board[idx]
+        neighbors = self._neighbors
+        visited = self._visited
+        stack = self._stack
+
+        group = []
+        lib_count = 0
+        to_clean = []
+
+        visited[idx] = 1
+        to_clean.append(idx)
+        stack[0] = idx
+        sp = 1
+
+        while sp > 0:
+            sp -= 1
+            pos = stack[sp]
+            group.append(pos)
+            for nbr in neighbors[pos]:
+                if visited[nbr]:
+                    continue
+                bval = board[nbr]
+                if bval == color:
+                    visited[nbr] = 1
+                    to_clean.append(nbr)
+                    stack[sp] = nbr
+                    sp += 1
+                elif bval == 0:
+                    visited[nbr] = 2  # liberty marker
+                    to_clean.append(nbr)
+                    lib_count += 1
+
+        for pos in to_clean:
+            visited[pos] = 0
+        return group, lib_count
+
+    def _group_has_liberty(self, board: np.ndarray, idx: int) -> bool:
+        """Fast check: does the group at idx have at least one liberty?
+
+        Returns as soon as any liberty is found — much faster than _find_group
+        for groups that DO have liberties (the common case in suicide checks).
+        """
+        color = board[idx]
+        neighbors = self._neighbors
+        visited = self._visited
+        stack = self._stack
+
+        visited[idx] = 1
+        to_clean = [idx]
+        stack[0] = idx
+        sp = 1
+        found = False
+
+        while sp > 0:
+            sp -= 1
+            pos = stack[sp]
+            for nbr in neighbors[pos]:
+                if visited[nbr]:
+                    continue
+                bval = board[nbr]
+                if bval == 0:
+                    found = True
+                    sp = 0  # break outer
+                    break
+                if bval == color:
+                    visited[nbr] = 1
+                    to_clean.append(nbr)
+                    stack[sp] = nbr
+                    sp += 1
+
+        for pos in to_clean:
+            visited[pos] = 0
+        return found
 
     def _capture_opponent(self, board: np.ndarray, idx: int, player: int) -> list[int]:
         """After placing player's stone at idx, capture opponent groups with 0 liberties.
 
-        Returns list of captured stone indices.
+        Returns list of captured stone indices. Uses _visited bytearray (value 3)
+        to track already-checked groups without a separate set.
         """
         opponent = -player
         captured = []
-        visited_groups: set[int] = set()
-        for nbr in self._neighbors[idx]:
-            if board[nbr] == opponent and nbr not in visited_groups:
-                group, liberties = self._find_group(board, nbr)
-                visited_groups.update(group)
-                if len(liberties) == 0:
+        neighbors = self._neighbors
+        visited = self._visited
+        all_marked = []
+
+        for nbr in neighbors[idx]:
+            if board[nbr] == opponent and not visited[nbr]:
+                group, lib_count = self._find_group(board, nbr)
+                # Mark group stones so we skip them if another neighbor
+                # of idx belongs to this same group
+                for pos in group:
+                    visited[pos] = 3
+                    all_marked.append(pos)
+                if lib_count == 0:
                     captured.extend(group)
-                    self._remove_group(board, group)
+                    for pos in group:
+                        board[pos] = 0.0
+
+        for pos in all_marked:
+            visited[pos] = 0
         return captured
 
     def _is_suicide(self, board: np.ndarray, idx: int, player: int) -> bool:
@@ -154,6 +221,8 @@ class Go(Game):
 
         A move is suicide if, after placing and capturing opponents,
         the player's own group has 0 liberties.
+
+        Uses _group_has_liberty for fast early returns.
         """
         # Fast path: if any neighbor is empty, the new stone has a liberty
         for nbr in self._neighbors[idx]:
@@ -161,21 +230,18 @@ class Go(Game):
                 return False
 
         # Surrounded by stones — need full check
-        # Temporarily place the stone
         board[idx] = player
-        # Try captures first
         opponent = -player
         for nbr in self._neighbors[idx]:
             if board[nbr] == opponent:
-                _, liberties = self._find_group(board, nbr)
-                if len(liberties) == 0:
+                if not self._group_has_liberty(board, nbr):
                     board[idx] = 0.0
-                    return False  # captures free liberties
+                    return False  # captures → not suicide
 
         # Check own group liberties
-        _, own_liberties = self._find_group(board, idx)
+        has_lib = self._group_has_liberty(board, idx)
         board[idx] = 0.0
-        return len(own_liberties) == 0
+        return not has_lib
 
     # ------------------------------------------------------------------
     # Game interface
@@ -215,8 +281,8 @@ class Go(Game):
         # (i.e., single stone capture that could be immediately recaptured)
         ko = -1
         if len(captured) == 1:
-            own_group, own_libs = self._find_group(board, action)
-            if len(own_group) == 1 and len(own_libs) == 1:
+            own_group, own_lib_count = self._find_group(board, action)
+            if len(own_group) == 1 and own_lib_count == 1:
                 ko = captured[0]
         self._set_ko_point(new_state, ko)
 
