@@ -49,8 +49,13 @@ class MCTSConfig:
     E.g. with num_simulations=200 and fraction=0.15, cheap = 30 sims."""
 
     fpu_reduction: float = 0.0
-    """First Play Urgency reduction. Unvisited children get Q = parent_Q - fpu_reduction.
-    0.0 = disabled (original AlphaZero). KataGo uses ~0.25. Focuses search on promising moves."""
+    """First Play Urgency reduction for non-root nodes. Unvisited children get Q = parent_Q - fpu_reduction.
+    0.0 = disabled (original AlphaZero). KataGo uses 0.2."""
+
+    root_fpu_reduction: float = -1.0
+    """FPU reduction at root. -1.0 = use fpu_reduction (same as non-root).
+    KataGo uses 0.1 at root (lower, since Dirichlet noise already explores).
+    0.0 at root means no FPU penalty = explore all moves equally."""
 
     c_puct_base: float = 0.0
     """Log-based c_puct scaling: effective_c = c_puct * log((parent_N + c_puct_base + 1) / c_puct_base).
