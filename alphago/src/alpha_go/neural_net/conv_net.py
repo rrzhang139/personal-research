@@ -83,7 +83,12 @@ class ConvNet(nn.Module):
         # Dropout (applied in policy and value heads)
         self.dropout = nn.Dropout(config.dropout) if config.dropout > 0 else nn.Identity()
 
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if torch.cuda.is_available():
+            self.device = torch.device('cuda')
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self.device = torch.device('mps')
+        else:
+            self.device = torch.device('cpu')
         self.to(self.device)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -127,12 +132,13 @@ class ConvNetWrapper:
     def __init__(self, board_size: int, action_size: int, config: NetworkConfig,
                  lr: float = 0.001, board_shape: tuple[int, int] = (6, 6)):
         self.net = ConvNet(board_shape, action_size, config)
-        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr)
         self.board_size = board_size
         self.board_shape = board_shape
         self.action_size = action_size
         self.config = config
         self.lr = lr
+        self.weight_decay = 0.0
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=lr, weight_decay=self.weight_decay)
 
     def predict(self, state: np.ndarray) -> tuple[np.ndarray, float]:
         self.net.eval()
@@ -194,4 +200,9 @@ class ConvNetWrapper:
             self.lr, self.board_shape,
         )
         new_wrapper.net.load_state_dict(copy.deepcopy(self.net.state_dict()))
+        if self.weight_decay > 0:
+            new_wrapper.weight_decay = self.weight_decay
+            new_wrapper.optimizer = torch.optim.Adam(
+                new_wrapper.net.parameters(), lr=self.lr, weight_decay=self.weight_decay
+            )
         return new_wrapper

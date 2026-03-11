@@ -33,20 +33,30 @@ class MCTSNode:
     def is_leaf(self) -> bool:
         return not self.is_expanded
 
-    def select_child(self, c_puct: float) -> 'MCTSNode':
+    def select_child(self, c_puct: float, fpu_reduction: float = 0.0) -> 'MCTSNode':
         """Select the child with the highest PUCT score.
 
         PUCT(s, a) = Q(s, a) + c_puct * P(s, a) * sqrt(N(s)) / (1 + N(s, a))
 
         Q is from the perspective of the player at this node.
+        For unvisited children (N=0), use FPU: parent's value - fpu_reduction.
         """
         best_score = -float('inf')
         best_child = None
         sqrt_parent = np.sqrt(self.N)
 
+        # FPU: unvisited children get parent's value minus a reduction
+        if fpu_reduction > 0.0 and self.N > 0:
+            fpu_value = self.Q - fpu_reduction  # parent's Q from parent perspective = self.Q
+        else:
+            fpu_value = 0.0
+
         for child in self.children.values():
-            # Q is stored from the child's perspective, negate for parent's view
-            exploit = -child.Q
+            if child.N == 0:
+                exploit = fpu_value
+            else:
+                # Q is stored from the child's perspective, negate for parent's view
+                exploit = -child.Q
             explore = c_puct * child.P * sqrt_parent / (1 + child.N)
             score = exploit + explore
 
@@ -56,8 +66,16 @@ class MCTSNode:
 
         return best_child
 
+    def ensure_state(self, game):
+        """Lazily compute state from parent on first visit."""
+        if self.state is None and self.parent is not None:
+            self.state = game.get_next_state(self.parent.state, self.action, self.parent.player)
+
     def expand(self, game, action_priors: np.ndarray):
         """Expand this node by creating children for all legal actions.
+
+        Children are created without states (lazy expansion). States are
+        computed on demand via ensure_state() when a child is first visited.
 
         Args:
             game: Game instance for computing next states.
@@ -75,9 +93,8 @@ class MCTSNode:
 
         for action in range(game.get_action_size()):
             if valid_moves[action] > 0:
-                next_state = game.get_next_state(self.state, action, self.player)
                 child = MCTSNode(
-                    state=next_state,
+                    state=None,
                     player=-self.player,
                     parent=self,
                     action=action,

@@ -48,6 +48,10 @@ class MCTSConfig:
     """Cheap search uses num_simulations * this fraction.
     E.g. with num_simulations=200 and fraction=0.15, cheap = 30 sims."""
 
+    fpu_reduction: float = 0.0
+    """First Play Urgency reduction. Unvisited children get Q = parent_Q - fpu_reduction.
+    0.0 = disabled (original AlphaZero). KataGo uses ~0.25. Focuses search on promising moves."""
+
 
 @dataclass
 class NetworkConfig:
@@ -78,6 +82,9 @@ class TrainingConfig:
 
     lr: float = 0.001
     """Learning rate for Adam optimizer."""
+
+    weight_decay: float = 0.0
+    """Weight decay (L2 regularization) for optimizer. KataGo uses 1e-4."""
 
     batch_size: int = 64
     """Minibatch size for training."""
@@ -114,6 +121,9 @@ class ArenaConfig:
     update_threshold: float = 0.55
     """Win rate threshold to accept the new model.
     0.55 = new model must win >55% of arena games."""
+
+    eval_games: int = 50
+    """Number of games to play vs random player each iteration. 0 = skip."""
 
 
 @dataclass

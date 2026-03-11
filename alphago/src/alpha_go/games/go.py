@@ -149,22 +149,22 @@ class Go(Game):
         A move is suicide if, after placing and capturing opponents,
         the player's own group has 0 liberties.
         """
+        # Fast path: if any neighbor is empty, the new stone has a liberty
+        for nbr in self._neighbors[idx]:
+            if board[nbr] == 0:
+                return False
+
+        # Surrounded by stones — need full check
         # Temporarily place the stone
         board[idx] = player
         # Try captures first
         opponent = -player
-        any_captured = False
         for nbr in self._neighbors[idx]:
             if board[nbr] == opponent:
                 _, liberties = self._find_group(board, nbr)
                 if len(liberties) == 0:
-                    any_captured = True
-                    break
-
-        if any_captured:
-            # Not suicide — captures would free liberties
-            board[idx] = 0.0
-            return False
+                    board[idx] = 0.0
+                    return False  # captures free liberties
 
         # Check own group liberties
         _, own_liberties = self._find_group(board, idx)
@@ -214,15 +214,11 @@ class Go(Game):
                 ko = captured[0]
         self._set_ko_point(new_state, ko)
 
-        # Shift history planes: older history shifts up, current becomes plane 0
-        # Player 1 planes (0-7): shift 6->7, 5->6, ..., 0->1, then set new plane 0
-        for i in range(NUM_HISTORY - 1, 0, -1):
-            planes[i] = planes[i - 1].copy()
+        # Shift history planes: bulk copy (1 op instead of 7 per player)
+        planes[1:NUM_HISTORY] = planes[0:NUM_HISTORY - 1]
         planes[0] = (board == 1.0).astype(np.float32)
 
-        # Player -1 planes (8-15): same shift
-        for i in range(NUM_HISTORY + NUM_HISTORY - 1, NUM_HISTORY, -1):
-            planes[i] = planes[i - 1].copy()
+        planes[NUM_HISTORY + 1:2 * NUM_HISTORY] = planes[NUM_HISTORY:2 * NUM_HISTORY - 1]
         planes[NUM_HISTORY] = (board == -1.0).astype(np.float32)
 
         # Flip color plane

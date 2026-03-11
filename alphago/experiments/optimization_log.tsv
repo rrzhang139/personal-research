@@ -1,0 +1,4 @@
+experiment	timestamp	type	description	metric	baseline	result	status	notes
+000_baseline	2026-03-11T00:00	baseline	Pre-optimization baseline (CPU, 200 sims, batch=8)	sims/sec	-	1594	keep	0.125s/move
+001_lazy_expand	2026-03-11T00:01	code	Lazy expansion: defer get_next_state to first visit	sims/sec	1594	1594	keep	Already applied before baseline
+002_suicide_fastpath	2026-03-11T00:02	code	Fast-path in _is_suicide: skip if any neighbor empty	sims/sec	1594	1894	keep	+19% speedup, 0.106s/move

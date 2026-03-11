@@ -41,6 +41,7 @@ class MCTS:
         self.model = model
         self.config = config
         self.temperature = config.temperature  # can be overridden per-move
+        self._fpu_reduction = getattr(config, 'fpu_reduction', 0.0)
 
     def search(self, state: np.ndarray, player: int, collect_diagnostics: bool = False) -> tuple[np.ndarray, SearchDiagnostics | None]:
         """Run MCTS from the given state and return action probabilities.
@@ -76,10 +77,13 @@ class MCTS:
 
             # SELECT: walk down tree picking best PUCT child
             while not node.is_leaf():
-                node = node.select_child(self.config.c_puct)
+                node = node.select_child(self.config.c_puct, self._fpu_reduction)
                 depth += 1
 
             max_depth = max(max_depth, depth)
+
+            # Lazy expansion: compute state on first visit
+            node.ensure_state(self.game)
 
             # Check if this leaf is terminal
             if node.parent is not None:
@@ -121,10 +125,13 @@ class MCTS:
                 depth = 0
 
                 while not node.is_leaf():
-                    node = node.select_child(self.config.c_puct)
+                    node = node.select_child(self.config.c_puct, self._fpu_reduction)
                     depth += 1
 
                 max_depth = max(max_depth, depth)
+
+                # Lazy expansion: compute state on first visit
+                node.ensure_state(self.game)
 
                 # Terminal nodes: backprop directly, no VL needed
                 if node.parent is not None:

@@ -137,10 +137,14 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
 
         # 5. Evaluate vs random
         t_phase = time.time()
-        vs_random = play_vs_random(
-            game, best_model, config.mcts, num_games=50,
-            num_workers=num_workers, game_name=config.game,
-        )
+        eval_games = getattr(config.arena, 'eval_games', 50)
+        if eval_games > 0:
+            vs_random = play_vs_random(
+                game, best_model, config.mcts, num_games=eval_games,
+                num_workers=num_workers, game_name=config.game,
+            )
+        else:
+            vs_random = -1.0  # skipped
         t_eval = time.time() - t_phase
 
         iter_time = time.time() - t_iter
