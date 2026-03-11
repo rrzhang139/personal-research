@@ -1,0 +1,47 @@
+{
+  "game": "go9",
+  "hypothesis": "Playout cap + no arena: more games, deeper search, always latest model",
+  "changes": [
+    "playout_cap_prob=0.125",
+    "cheap=30 sims",
+    "full=200 sims",
+    "no arena",
+    "100 games/iter",
+    "c_puct=1.5"
+  ],
+  "warm_start": "/workspace/code/personal-research/alphago/experiments/20260310_go9_playout_cap/../20260309_go9_128f/data/checkpoints/best.pt",
+  "mcts": {
+    "num_simulations": 200,
+    "c_puct": 1.5,
+    "dirichlet_alpha": 0.03,
+    "dirichlet_epsilon": 0.25,
+    "temperature": 1.0,
+    "temp_threshold": 20,
+    "nn_batch_size": 8,
+    "playout_cap_prob": 0.125,
+    "playout_cap_cheap_fraction": 0.15
+  },
+  "network": {
+    "network_type": "cnn",
+    "hidden_size": 128,
+    "num_layers": 4,
+    "num_filters": 128,
+    "num_res_blocks": 4,
+    "dropout": 0.0
+  },
+  "training": {
+    "lr": 0.001,
+    "batch_size": 64,
+    "epochs_per_iteration": 10,
+    "max_buffer_size": 200000,
+    "buffer_strategy": "fifo",
+    "buffer_window": 20,
+    "num_iterations": 12,
+    "games_per_iteration": 100,
+    "checkpoint_dir": "/workspace/code/personal-research/alphago/experiments/20260310_go9_playout_cap/data/checkpoints"
+  },
+  "arena": {
+    "arena_games": 0,
+    "update_threshold": 0.55
+  }
+}
