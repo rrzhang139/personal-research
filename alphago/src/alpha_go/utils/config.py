@@ -95,6 +95,10 @@ class NetworkConfig:
     """Add global avg+max pooling features to value head (KataGo-style).
     Improves position evaluation but incompatible with older checkpoints."""
 
+    use_batch_norm: bool = True
+    """Use batch normalization in residual blocks. KataGo found removing BN
+    gives 1.6x training speedup with equal or better performance."""
+
 
 @dataclass
 class TrainingConfig:

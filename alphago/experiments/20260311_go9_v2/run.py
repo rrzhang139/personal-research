@@ -51,7 +51,7 @@ def main():
         mcts=MCTSConfig(
             num_simulations=200,
             c_puct=1.0,  # KataGo default
-            dirichlet_alpha=0.03,
+            dirichlet_alpha=0.12,  # 10/81 for 9x9 (0.03 is for 19x19)
             dirichlet_epsilon=0.25,
             temp_threshold=30,
             temp_decay_halflife=19,  # KataGo-style exponential decay
@@ -66,6 +66,7 @@ def main():
             num_filters=128,
             num_res_blocks=4,
             global_pool_value=True,  # KataGo-style
+            use_batch_norm=False,  # KataGo: 1.6x speedup
         ),
         training=TrainingConfig(
             lr=0.002,

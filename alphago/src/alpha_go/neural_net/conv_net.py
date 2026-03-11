@@ -23,14 +23,14 @@ from ..utils.config import NetworkConfig
 
 
 class ResBlock(nn.Module):
-    """Residual block: conv -> BN -> ReLU -> conv -> BN -> skip -> ReLU."""
+    """Residual block: conv -> [BN] -> ReLU -> conv -> [BN] -> skip -> ReLU."""
 
-    def __init__(self, num_filters: int):
+    def __init__(self, num_filters: int, use_bn: bool = True):
         super().__init__()
-        self.conv1 = nn.Conv2d(num_filters, num_filters, 3, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(num_filters)
-        self.conv2 = nn.Conv2d(num_filters, num_filters, 3, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(num_filters)
+        self.conv1 = nn.Conv2d(num_filters, num_filters, 3, padding=1, bias=not use_bn)
+        self.bn1 = nn.BatchNorm2d(num_filters) if use_bn else nn.Identity()
+        self.conv2 = nn.Conv2d(num_filters, num_filters, 3, padding=1, bias=not use_bn)
+        self.bn2 = nn.BatchNorm2d(num_filters) if use_bn else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         residual = x
@@ -59,24 +59,25 @@ class ConvNet(nn.Module):
         self.cols = cols
         self.board_shape = board_shape
         nf = config.num_filters
+        use_bn = getattr(config, 'use_batch_norm', True)
 
         # Initial convolution
-        self.initial_conv = nn.Conv2d(in_channels, nf, 3, padding=1, bias=False)
-        self.initial_bn = nn.BatchNorm2d(nf)
+        self.initial_conv = nn.Conv2d(in_channels, nf, 3, padding=1, bias=not use_bn)
+        self.initial_bn = nn.BatchNorm2d(nf) if use_bn else nn.Identity()
 
         # Residual tower
         self.res_blocks = nn.Sequential(
-            *[ResBlock(nf) for _ in range(config.num_res_blocks)]
+            *[ResBlock(nf, use_bn=use_bn) for _ in range(config.num_res_blocks)]
         )
 
         # Policy head
-        self.policy_conv = nn.Conv2d(nf, 2, 1, bias=False)
-        self.policy_bn = nn.BatchNorm2d(2)
+        self.policy_conv = nn.Conv2d(nf, 2, 1, bias=not use_bn)
+        self.policy_bn = nn.BatchNorm2d(2) if use_bn else nn.Identity()
         self.policy_fc = nn.Linear(2 * rows * cols, action_size)
 
         # Value head
-        self.value_conv = nn.Conv2d(nf, 1, 1, bias=False)
-        self.value_bn = nn.BatchNorm2d(1)
+        self.value_conv = nn.Conv2d(nf, 1, 1, bias=not use_bn)
+        self.value_bn = nn.BatchNorm2d(1) if use_bn else nn.Identity()
         self.global_pool_value = getattr(config, 'global_pool_value', False)
         value_input_size = rows * cols + (2 * nf if self.global_pool_value else 0)
         self.value_fc1 = nn.Linear(value_input_size, 64)
