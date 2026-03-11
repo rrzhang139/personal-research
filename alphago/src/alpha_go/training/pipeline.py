@@ -79,12 +79,19 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
     for iteration in range(1, config.training.num_iterations + 1):
         t_iter = time.time()
 
-        # 1. Self-play
+        # 1. Self-play (with optional progressive sims)
         t_phase = time.time()
+        mcts_config = config.mcts
+        if getattr(config.mcts, 'progressive_sims', False):
+            from dataclasses import replace
+            progress = (iteration - 1) / max(1, config.training.num_iterations - 1)
+            min_s = getattr(config.mcts, 'min_sims', 50)
+            current_sims = int(min_s + progress * (config.mcts.num_simulations - min_s))
+            mcts_config = replace(config.mcts, num_simulations=current_sims)
         new_examples, sp_stats = generate_self_play_data(
             game=game,
             model=best_model,
-            mcts_config=config.mcts,
+            mcts_config=mcts_config,
             num_games=config.training.games_per_iteration,
             augment=True,
             num_workers=num_workers,

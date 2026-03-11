@@ -68,6 +68,13 @@ class MCTSConfig:
     """Log-based c_puct scaling: effective_c = c_puct * log((parent_N + c_puct_base + 1) / c_puct_base).
     0.0 = disabled (constant c_puct). AlphaZero uses 19652. Reduces exploration as visit count grows."""
 
+    progressive_sims: bool = False
+    """Scale num_simulations linearly from min_sims to num_simulations across training.
+    First iteration uses min_sims; last uses num_simulations. More games early, better search later."""
+
+    min_sims: int = 50
+    """Starting simulation count when progressive_sims=True."""
+
 
 @dataclass
 class NetworkConfig:
