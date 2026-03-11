@@ -76,10 +76,8 @@ class Go(Game):
     def _get_current_board(self, state: np.ndarray) -> np.ndarray:
         """Reconstruct flat board (N*N,) with {0, 1, -1} from planes 0 and 8."""
         planes = self._get_planes(state)
-        board = np.zeros(self.n2, dtype=np.float32)
-        board[planes[0] > 0.5] = 1.0       # player 1 stones (current)
-        board[planes[NUM_HISTORY] > 0.5] = -1.0  # player -1 stones (current)
-        return board
+        # Must copy: callers (_is_suicide, get_next_state) modify the board in-place
+        return (planes[0] - planes[NUM_HISTORY]).copy()
 
     def _get_pass_count(self, state: np.ndarray) -> int:
         return int(state[self.nn_input_size])
