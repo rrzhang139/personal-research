@@ -207,11 +207,8 @@ class MCTS:
     def _extract_policy(self, root: MCTSNode, max_depth: int, collect_diagnostics: bool) -> tuple[np.ndarray, SearchDiagnostics | None]:
         """Extract visit-count policy and diagnostics from the root."""
         action_probs = np.zeros(self.game.get_action_size(), dtype=np.float32)
-        if root._child_actions is not None:
-            action_probs[root._child_actions[:root._num_children]] = root._child_N[:root._num_children]
-        else:
-            for child in root.children:
-                action_probs[child.action] = child.N
+        for child in root.children:
+            action_probs[child.action] = child.N
 
         # Apply temperature
         if action_probs.sum() > 0:
@@ -246,14 +243,11 @@ class MCTS:
         if self.config.dirichlet_epsilon == 0:
             return
 
-        n = root._num_children
+        n = len(root.children)
         if n == 0:
             return
         noise = np.random.dirichlet(np.full(n, self.config.dirichlet_alpha))
         eps = self.config.dirichlet_epsilon
 
-        # Update both child objects and parallel array
-        for i in range(n):
-            new_p = (1 - eps) * root.children[i].P + eps * noise[i]
-            root.children[i].P = new_p
-            root._child_P[i] = new_p
+        for i, child in enumerate(root.children):
+            child.P = (1 - eps) * child.P + eps * noise[i]
