@@ -78,7 +78,13 @@ def self_play_game(
         mcts = mcts_full if is_full else mcts_cheap
 
         # Use temperature: exploratory early, greedy late
-        if move_count < mcts_config.temp_threshold:
+        halflife = getattr(mcts_config, 'temp_decay_halflife', 0)
+        if halflife > 0:
+            # Exponential decay (KataGo-style)
+            temp_start = mcts_config.temperature
+            temp_end = 0.1
+            temp = temp_end + (temp_start - temp_end) * (0.5 ** (move_count / halflife))
+        elif move_count < mcts_config.temp_threshold:
             temp = 1.0
         else:
             temp = 0.01  # nearly greedy

@@ -30,7 +30,14 @@ class MCTSConfig:
 
     temp_threshold: int = 15
     """After this many moves in a game, switch to greedy (temp -> 0).
-    Encourages exploration early, exploitation late."""
+    Encourages exploration early, exploitation late.
+    Ignored if temp_decay_halflife > 0 (exponential decay used instead)."""
+
+    temp_decay_halflife: int = 0
+    """Exponential temperature decay halflife (in moves). KataGo uses 19.
+    0 = disabled (use temp_threshold hard cutoff instead).
+    When enabled: temp(move) = temp_end + (temp_start - temp_end) * 0.5^(move/halflife)
+    where temp_start = temperature, temp_end = 0.1."""
 
     nn_batch_size: int = 1
     """Batch size for neural network evaluations within MCTS.

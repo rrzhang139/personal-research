@@ -50,14 +50,16 @@ def main():
         seed=42,
         mcts=MCTSConfig(
             num_simulations=200,
-            c_puct=1.5,
+            c_puct=1.0,  # KataGo default
             dirichlet_alpha=0.03,
             dirichlet_epsilon=0.25,
-            temp_threshold=20,
+            temp_threshold=30,
+            temp_decay_halflife=19,  # KataGo-style exponential decay
             nn_batch_size=64,  # 1.66x faster on CUDA
             playout_cap_prob=0.125,
             playout_cap_cheap_fraction=0.15,
-            fpu_reduction=0.25,
+            fpu_reduction=0.2,  # KataGo fpuReductionMax
+            root_fpu_reduction=0.1,  # KataGo rootFpuReductionMax
         ),
         network=NetworkConfig(
             network_type="cnn",
