@@ -1,12 +1,12 @@
-"""Multiprocessing helpers for parallel self-play and arena games.
+"""Parallel self-play helpers.
 
-Two modes:
-1. CPU-parallel (original): each worker has its own model copy on CPU.
-   Good for small models where CPU inference is fast.
+GPU-parallel mode (primary):
+  Worker threads do MCTS game logic. A background thread batches their
+  NN requests and runs inference on GPU. GPU ops release the GIL, so
+  multiple threads overlap their game logic with GPU inference.
 
-2. GPU-parallel (new): workers do game logic on CPU, send inference
-   requests to a centralized GPU server in the main process via queues.
-   Much faster for CNN models where GPU batch inference >> CPU inference.
+CPU-parallel mode (legacy, for arena):
+  Each subprocess has its own model copy on CPU.
 """
 
 from __future__ import annotations
@@ -14,9 +14,10 @@ from __future__ import annotations
 import io
 import multiprocessing as mp
 import os
-import queue as stdlib_queue
+import queue
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import torch
@@ -30,8 +31,183 @@ def resolve_num_workers(n: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Model serialization (used by CPU-parallel mode)
+# GPU-parallel: threaded workers + batched GPU inference
 # ---------------------------------------------------------------------------
+
+class BatchInferenceModel:
+    """Wraps a model to batch inference requests from multiple threads.
+
+    Worker threads call predict/predict_batch which enqueue requests.
+    A background thread collects them, forms GPU batches, and dispatches results.
+    """
+
+    def __init__(self, model):
+        self._model = model
+        self._request_queue = queue.Queue()
+
+    def predict(self, state: np.ndarray) -> tuple[np.ndarray, float]:
+        """Single-state inference. Blocks until GPU processes the request."""
+        event = threading.Event()
+        holder = [None]  # mutable container for result
+        self._request_queue.put(([state], event, holder))
+        event.wait()
+        policies, values = holder[0]
+        return policies[0], values[0]
+
+    def predict_batch(self, states: list[np.ndarray]) -> tuple[list[np.ndarray], list[float]]:
+        """Batch inference. Blocks until GPU processes the request."""
+        event = threading.Event()
+        holder = [None]
+        self._request_queue.put((states, event, holder))
+        event.wait()
+        return holder[0]
+
+    def run_inference_loop(self, stop_event: threading.Event):
+        """Background thread: collect requests, batch-process on GPU."""
+        while not stop_event.is_set():
+            pending = []
+            try:
+                req = self._request_queue.get(timeout=0.002)
+                pending.append(req)
+            except queue.Empty:
+                continue
+
+            # Drain more requests for cross-thread batching
+            while len(pending) < 64:
+                try:
+                    req = self._request_queue.get_nowait()
+                    pending.append(req)
+                except queue.Empty:
+                    break
+
+            # Flatten all states into one mega-batch
+            all_states = []
+            meta = []  # (event, holder, start, count)
+            for states, event, holder in pending:
+                start = len(all_states)
+                all_states.extend(states)
+                meta.append((event, holder, start, len(states)))
+
+            # GPU batch inference (releases GIL during CUDA ops)
+            policies, values = self._model.predict_batch(all_states)
+
+            # Dispatch results and signal waiting threads
+            for event, holder, start, count in meta:
+                holder[0] = (policies[start:start + count], values[start:start + count])
+                event.set()
+
+
+def _threaded_self_play_worker(game_name: str, batch_model: BatchInferenceModel,
+                                mcts_config, num_games: int):
+    """Thread worker: play self-play games using batched GPU model."""
+    from ..games import get_game
+    from .self_play import self_play_game
+
+    game = get_game(game_name)
+    results = []
+
+    for _ in range(num_games):
+        examples, outcome, diag = self_play_game(
+            game, batch_model, mcts_config, collect_diagnostics=True
+        )
+        results.append((examples, outcome, diag))
+
+    return results
+
+
+def generate_gpu_parallel_self_play(game, model, mcts_config, num_games: int,
+                                     num_workers: int, game_name: str,
+                                     augment: bool = True):
+    """Generate self-play data: threaded workers + batched GPU inference.
+
+    Workers run MCTS game logic in threads. A background thread batches
+    their NN requests and runs inference on GPU. GPU ops release the GIL,
+    allowing game logic and inference to overlap.
+    """
+    from .self_play import SelfPlayStats
+
+    # Wrap model for batched cross-thread inference
+    batch_model = BatchInferenceModel(model)
+
+    # Start GPU inference thread
+    stop_event = threading.Event()
+    gpu_thread = threading.Thread(
+        target=batch_model.run_inference_loop,
+        args=(stop_event,),
+        daemon=True,
+    )
+    gpu_thread.start()
+
+    # Distribute games across workers
+    base = num_games // num_workers
+    remainder = num_games % num_workers
+    games_per_worker = [base + (1 if i < remainder else 0) for i in range(num_workers)]
+
+    # Run workers in thread pool
+    all_results = []
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = []
+        for i in range(num_workers):
+            if games_per_worker[i] > 0:
+                f = executor.submit(
+                    _threaded_self_play_worker,
+                    game_name, batch_model, mcts_config, games_per_worker[i],
+                )
+                futures.append(f)
+
+        for f in as_completed(futures):
+            all_results.extend(f.result())
+
+    # Stop GPU inference thread
+    stop_event.set()
+    gpu_thread.join(timeout=5)
+
+    # Aggregate results
+    all_examples = []
+    stats = SelfPlayStats()
+    game_lengths = []
+    root_values = []
+    policy_entropies = []
+    search_depths = []
+
+    for examples, outcome, diag in all_results:
+        if outcome == 1:
+            stats.p1_wins += 1
+        elif outcome == -1:
+            stats.p2_wins += 1
+        else:
+            stats.draws += 1
+
+        if diag:
+            game_lengths.append(diag['game_length'])
+            root_values.append(diag['mean_root_value'])
+            policy_entropies.append(diag['mean_policy_entropy'])
+            search_depths.append(diag['mean_search_depth'])
+
+        if augment:
+            for state, pi, v in examples:
+                for sym_state, sym_pi in game.get_symmetries(state, pi):
+                    all_examples.append((sym_state, sym_pi, v))
+        else:
+            all_examples.extend(examples)
+
+    if game_lengths:
+        stats.mean_game_length = float(np.mean(game_lengths))
+        stats.mean_root_value = float(np.mean(root_values))
+        stats.mean_policy_entropy = float(np.mean(policy_entropies))
+        stats.mean_search_depth = float(np.mean(search_depths))
+
+    return all_examples, stats
+
+
+# ---------------------------------------------------------------------------
+# CPU-parallel mode (for arena — workers have own model copy on CPU)
+# ---------------------------------------------------------------------------
+
+_worker_model = None
+_worker_model1 = None
+_worker_model2 = None
+
 
 def serialize_model_state(model) -> tuple[bytes, dict]:
     """Serialize model weights to bytes + metadata for reconstruction."""
@@ -76,15 +252,6 @@ def _reconstruct_model(weight_bytes: bytes, info: dict):
     model.net.load_state_dict(state_dict)
     model.net.eval()
     return model
-
-
-# ---------------------------------------------------------------------------
-# CPU-parallel mode (original Pool-based approach)
-# ---------------------------------------------------------------------------
-
-_worker_model = None
-_worker_model1 = None
-_worker_model2 = None
 
 
 def _worker_init(weight_bytes: bytes, info: dict):
@@ -133,196 +300,3 @@ def create_arena_pool(model1, model2, num_workers: int) -> mp.pool.Pool:
         initializer=_worker_init_two_models,
         initargs=(wb1, info1, wb2, info2),
     )
-
-
-# ---------------------------------------------------------------------------
-# GPU-parallel mode: workers do game logic, GPU server does inference
-# ---------------------------------------------------------------------------
-
-class ModelProxy:
-    """Proxy model that sends inference requests to GPU server via queues.
-
-    Implements predict/predict_batch so MCTS search can use it transparently.
-    """
-
-    def __init__(self, request_queue, response_queue, worker_id: int):
-        self.req_q = request_queue
-        self.resp_q = response_queue
-        self.worker_id = worker_id
-
-    def predict(self, state: np.ndarray) -> tuple[np.ndarray, float]:
-        self.req_q.put((self.worker_id, [state]))
-        policies, values = self.resp_q.get()
-        return policies[0], values[0]
-
-    def predict_batch(self, states: list[np.ndarray]) -> tuple[list[np.ndarray], list[float]]:
-        self.req_q.put((self.worker_id, states))
-        return self.resp_q.get()
-
-
-def _gpu_worker_main(worker_id: int, game_name: str, mcts_config,
-                     num_games: int, request_queue, response_queue,
-                     result_queue):
-    """Worker process: play self-play games, send inference to GPU server."""
-    # No torch needed in workers — only game logic + numpy
-    os.environ['OMP_NUM_THREADS'] = '1'
-    os.environ['MKL_NUM_THREADS'] = '1'
-
-    import numpy as np
-    np.random.seed(os.getpid() % (2**31))
-
-    from ..games import get_game
-    from .self_play import self_play_game
-
-    game = get_game(game_name)
-    proxy = ModelProxy(request_queue, response_queue, worker_id)
-
-    for g in range(num_games):
-        examples, outcome, diag = self_play_game(
-            game, proxy, mcts_config, collect_diagnostics=True
-        )
-        result_queue.put((examples, outcome, diag))
-
-    # Signal done to GPU server
-    request_queue.put(None)
-
-
-def _gpu_inference_loop(model, request_queue, response_queues, num_workers):
-    """Run GPU inference server: batch requests from workers, evaluate on GPU.
-
-    Runs until all workers signal done (by putting None in request_queue).
-    Batches across multiple workers for better GPU utilization.
-    """
-    workers_done = 0
-
-    while workers_done < num_workers:
-        # Collect first request (blocking with timeout)
-        pending = []
-        try:
-            req = request_queue.get(timeout=0.005)
-            if req is None:
-                workers_done += 1
-                continue
-            pending.append(req)
-        except stdlib_queue.Empty:
-            continue
-
-        # Drain more requests (non-blocking) for batching across workers
-        drain_limit = max(num_workers * 2, 64)
-        while len(pending) < drain_limit:
-            try:
-                req = request_queue.get_nowait()
-                if req is None:
-                    workers_done += 1
-                    continue
-                pending.append(req)
-            except stdlib_queue.Empty:
-                break
-
-        if not pending:
-            continue
-
-        # Flatten all states into one mega-batch
-        all_states = []
-        meta = []  # (worker_id, start_idx, count)
-        for worker_id, states in pending:
-            start = len(all_states)
-            all_states.extend(states)
-            meta.append((worker_id, start, len(states)))
-
-        # GPU batch inference
-        policies, values = model.predict_batch(all_states)
-
-        # Dispatch results back to workers
-        for worker_id, start, count in meta:
-            resp = (policies[start:start + count], values[start:start + count])
-            response_queues[worker_id].put(resp)
-
-
-def generate_gpu_parallel_self_play(game, model, mcts_config, num_games: int,
-                                     num_workers: int, game_name: str,
-                                     augment: bool = True):
-    """Generate self-play data: workers on CPU, inference on GPU.
-
-    Workers run MCTS game logic on CPU and send inference requests to a
-    GPU server running in the main process. This keeps the GPU busy with
-    large batches while parallelizing game logic across CPU cores.
-
-    Returns:
-        (examples, stats): same format as generate_self_play_data.
-    """
-    from .self_play import SelfPlayStats
-
-    # Use spawn to avoid CUDA fork issues (workers don't need torch)
-    ctx = mp.get_context('spawn')
-
-    # Create queues
-    request_queue = ctx.Queue()
-    response_queues = [ctx.Queue() for _ in range(num_workers)]
-    result_queue = ctx.Queue()
-
-    # Distribute games evenly
-    base = num_games // num_workers
-    remainder = num_games % num_workers
-    games_per_worker = [base + (1 if i < remainder else 0) for i in range(num_workers)]
-
-    # Start worker processes
-    workers = []
-    for i in range(num_workers):
-        if games_per_worker[i] == 0:
-            # Signal done immediately for empty workers
-            request_queue.put(None)
-            continue
-        p = ctx.Process(
-            target=_gpu_worker_main,
-            args=(i, game_name, mcts_config, games_per_worker[i],
-                  request_queue, response_queues[i], result_queue),
-        )
-        p.start()
-        workers.append(p)
-
-    # Run GPU inference loop in main thread (blocks until all workers done)
-    _gpu_inference_loop(model, request_queue, response_queues, num_workers)
-
-    # Wait for workers to finish
-    for p in workers:
-        p.join()
-
-    # Collect results
-    all_examples = []
-    stats = SelfPlayStats()
-    game_lengths = []
-    root_values = []
-    policy_entropies = []
-    search_depths = []
-
-    while not result_queue.empty():
-        examples, outcome, diag = result_queue.get_nowait()
-
-        if outcome == 1:
-            stats.p1_wins += 1
-        elif outcome == -1:
-            stats.p2_wins += 1
-        else:
-            stats.draws += 1
-
-        if diag:
-            game_lengths.append(diag['game_length'])
-            root_values.append(diag['mean_root_value'])
-            policy_entropies.append(diag['mean_policy_entropy'])
-            search_depths.append(diag['mean_search_depth'])
-
-        if augment:
-            for state, pi, v in examples:
-                for sym_state, sym_pi in game.get_symmetries(state, pi):
-                    all_examples.append((sym_state, sym_pi, v))
-        else:
-            all_examples.extend(examples)
-
-    if game_lengths:
-        stats.mean_game_length = float(np.mean(game_lengths))
-        stats.mean_root_value = float(np.mean(root_values))
-        stats.mean_policy_entropy = float(np.mean(policy_entropies))
-        stats.mean_search_depth = float(np.mean(search_depths))
-
-    return all_examples, stats
