@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=64"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core>=0.9", "nanobind>=2.0"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "alpha-go"
@@ -8,8 +8,9 @@ version = "0.1.0"
 description = "AlphaZero from scratch — self-play RL research testbed"
 requires-python = ">=3.9"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.scikit-build]
+cmake.build-type = "Release"
+wheel.packages = ["src/alpha_go", "src/mcts_cpp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

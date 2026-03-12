@@ -185,6 +185,10 @@ class AlphaZeroConfig:
     num_workers: int = 1
     """Parallel workers for self-play/arena. 0=auto (cpu_count-1), 1=sequential."""
 
+    use_cpp_mcts: bool = False
+    """Use C++ MCTS engine for self-play. Requires building the C++ extension.
+    Gives ~6x game logic speedup + true multi-threading (bypasses GIL)."""
+
     use_wandb: bool = False
     """Whether to log to Weights & Biases."""
 

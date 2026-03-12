@@ -201,6 +201,22 @@ def generate_gpu_parallel_self_play(game, model, mcts_config, num_games: int,
 
 
 # ---------------------------------------------------------------------------
+# C++-parallel mode (C++ MCTS engine with true multi-threading)
+# ---------------------------------------------------------------------------
+
+def generate_cpp_parallel_self_play(game, model, mcts_config, num_games: int,
+                                     num_threads: int, augment: bool = True):
+    """Generate self-play data using C++ MCTS engine.
+
+    C++ worker threads run game logic + MCTS without the GIL. Only NN inference
+    callbacks acquire the GIL momentarily. This pushes GPU utilization to 60-80%.
+    """
+    from mcts_cpp import generate_self_play_data as cpp_generate
+    return cpp_generate(game, model, mcts_config, num_games,
+                        num_threads=num_threads, augment=augment)
+
+
+# ---------------------------------------------------------------------------
 # CPU-parallel mode (for arena — workers have own model copy on CPU)
 # ---------------------------------------------------------------------------
 

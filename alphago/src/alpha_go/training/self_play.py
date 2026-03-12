@@ -159,16 +159,25 @@ def generate_self_play_data(
     augment: bool = True,
     num_workers: int = 1,
     game_name: str | None = None,
+    use_cpp: bool = False,
 ) -> tuple[list[tuple[np.ndarray, np.ndarray, float]], SelfPlayStats]:
     """Generate training data from multiple self-play games.
 
     Args:
         num_workers: Number of parallel workers. 1 = sequential (no overhead).
         game_name: Game name string (required for parallel, used to reconstruct game in workers).
+        use_cpp: Use C++ MCTS engine (true multi-threading, bypasses GIL).
 
     Returns:
         (examples, stats): examples is the training data, stats has outcomes + diagnostics.
     """
+    if use_cpp:
+        from .parallel import generate_cpp_parallel_self_play
+        return generate_cpp_parallel_self_play(
+            game, model, mcts_config, num_games,
+            num_threads=max(1, num_workers), augment=augment,
+        )
+
     if num_workers > 1 and game_name is not None:
         from .parallel import generate_gpu_parallel_self_play
         return generate_gpu_parallel_self_play(

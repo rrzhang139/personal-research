@@ -96,6 +96,7 @@ def run_pipeline(game: Game, model, config: AlphaZeroConfig) -> dict:
             augment=True,
             num_workers=num_workers,
             game_name=config.game,
+            use_cpp=getattr(config, 'use_cpp_mcts', False),
         )
         if use_window:
             iteration_history.append(new_examples)
