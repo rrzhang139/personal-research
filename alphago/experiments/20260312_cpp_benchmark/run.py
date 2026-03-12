@@ -204,7 +204,7 @@ def main():
     NUM_GAMES = 50    # games per iteration (50 instead of 500 for speed)
     BENCH_ITERS = 5   # iterations to benchmark
     STABILITY_ITERS = 20  # extra iterations to verify C++ stability
-    NUM_WORKERS_CPP = 4   # C++ worker threads
+    NUM_WORKERS_CPP = 1   # C++ worker threads (1 = best; multi-thread slower due to GIL)
 
     config = AlphaZeroConfig(
         game="go9",
