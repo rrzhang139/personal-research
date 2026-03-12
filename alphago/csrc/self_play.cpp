@@ -39,9 +39,9 @@ void SelfPlayWorker::add_dirichlet_noise(MCTSNode* root) {
 
 void SelfPlayWorker::evaluate_leaf(const float* canonical_state,
                                     float* policy_out, float& value_out) {
-    // Call predict_fn for a single state
-    predict_fn_(canonical_state, 1, game_.nn_input_size, policy_out, &value_out,
-                game_.n2 + 1);
+    // Call predict_fn for a single state (dereference pointer)
+    (*predict_fn_)(canonical_state, 1, game_.nn_input_size, policy_out, &value_out,
+                   game_.n2 + 1);
 }
 
 void SelfPlayWorker::extract_policy(MCTSNode* root, float temperature, float* policy_out) {
@@ -189,8 +189,8 @@ void SelfPlayWorker::run_search(MCTSNode* root, int num_sims) {
             std::vector<float> batch_policies(ul_count * action_size);
             std::vector<float> batch_values(ul_count);
 
-            predict_fn_(batch_states.data(), ul_count, game_.nn_input_size,
-                        batch_policies.data(), batch_values.data(), action_size);
+            (*predict_fn_)(batch_states.data(), ul_count, game_.nn_input_size,
+                          batch_policies.data(), batch_values.data(), action_size);
 
             // Build map: leaf -> (policy, value)
             struct LeafResult { float* policy; float value; };
@@ -355,10 +355,12 @@ generate_self_play_data(int board_size, int num_games, const MCTSCppConfig& conf
     GameStats stats;
     std::vector<int> game_lengths;
 
+    // Keep predict_fn on the main thread's stack; workers access it via pointer
+    // to avoid copying the std::function (which may contain Python objects).
     auto worker_fn = [&](int worker_id) {
         SelfPlayWorker worker(game, config, worker_id,
                               static_cast<unsigned>(42 + worker_id));
-        worker.set_predict_fn(predict_fn);
+        worker.set_predict_fn(&predict_fn);
 
         while (true) {
             int remaining = games_remaining.fetch_sub(1);

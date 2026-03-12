@@ -81,8 +81,9 @@ public:
     // Run MCTS search from root, using the inference callback
     void run_search(MCTSNode* root, int num_sims);
 
-    // Set the inference function (called from main thread)
-    void set_predict_fn(PredictFn fn) { predict_fn_ = fn; }
+    // Set the inference function (called from main thread).
+    // Stores a pointer — the PredictFn must outlive the worker.
+    void set_predict_fn(const PredictFn* fn) { predict_fn_ = fn; }
 
 private:
     const GoGame& game_;
@@ -90,7 +91,7 @@ private:
     int worker_id_;
     FloodFillScratch scratch_;
     NodeArena arena_;
-    PredictFn predict_fn_;
+    const PredictFn* predict_fn_ = nullptr;
     std::mt19937 rng_;
 
     void add_dirichlet_noise(MCTSNode* root);
