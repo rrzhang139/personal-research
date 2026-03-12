@@ -117,6 +117,38 @@ NB_MODULE(_mcts_cpp, m) {
             return make_numpy_1d(data, n);
         });
 
+    // --- test_cpp_only: pure C++ self-play (no Python callback) ---
+    m.def("test_cpp_only",
+        [](int board_size, int num_games, int num_sims) {
+            GoGame game(board_size);
+            MCTSCppConfig config;
+            config.num_simulations = num_sims;
+            config.nn_batch_size = 1;
+            config.dirichlet_epsilon = 0.0f;  // no noise
+
+            int action_size = board_size * board_size + 1;
+
+            // Pure C++ uniform predict — no Python, no GIL
+            PredictFn predict_fn = [action_size](
+                const float*, int batch_size, int,
+                float* policies_out, float* values_out, int) {
+                for (int b = 0; b < batch_size; b++) {
+                    float inv = 1.0f / action_size;
+                    for (int i = 0; i < action_size; i++)
+                        policies_out[b * action_size + i] = inv;
+                    values_out[b] = 0.0f;
+                }
+            };
+
+            auto [examples, stats] = generate_self_play_data(
+                board_size, num_games, config, predict_fn, 1);
+
+            return static_cast<int>(examples.size());
+        },
+        "board_size"_a, "num_games"_a = 1, "num_sims"_a = 5,
+        "Test C++ self-play with uniform predict (no Python callback)."
+    );
+
     // --- generate_self_play_data ---
     m.def("generate_self_play_data",
         [](int board_size, int num_games,
