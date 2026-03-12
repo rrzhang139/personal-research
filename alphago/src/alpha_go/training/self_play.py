@@ -170,7 +170,11 @@ def generate_self_play_data(
         (examples, stats): examples is the training data, stats has outcomes + diagnostics.
     """
     if num_workers > 1 and game_name is not None:
-        return _generate_parallel(game, model, mcts_config, num_games, augment, num_workers, game_name)
+        from .parallel import generate_gpu_parallel_self_play
+        return generate_gpu_parallel_self_play(
+            game, model, mcts_config, num_games,
+            num_workers=num_workers, game_name=game_name, augment=augment,
+        )
 
     return _generate_sequential(game, model, mcts_config, num_games, augment)
 
