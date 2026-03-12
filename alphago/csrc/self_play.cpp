@@ -131,13 +131,22 @@ void SelfPlayWorker::run_search(MCTSNode* root, int num_sims) {
         }
     } else {
         // Batched search with virtual loss
+        // Pre-allocate batch buffers outside loop to avoid repeated allocation
+        std::vector<MCTSNode*> leaves;
+        leaves.reserve(nn_batch);
+        std::vector<MCTSNode*> unique_leaves;
+        unique_leaves.reserve(nn_batch);
+        std::vector<int> leaf_to_unique(nn_batch);  // maps leaf index -> unique index
+        std::vector<float> batch_states(nn_batch * game_.nn_input_size);
+        std::vector<float> batch_policies(nn_batch * action_size);
+        std::vector<float> batch_values(nn_batch);
+
         int sims_done = 0;
         while (sims_done < num_sims) {
             int batch = std::min(nn_batch, num_sims - sims_done);
 
             // Phase 1: Select leaves with virtual loss
-            std::vector<MCTSNode*> leaves;
-            leaves.reserve(batch);
+            leaves.clear();
 
             for (int b = 0; b < batch; b++) {
                 MCTSNode* node = root;
@@ -165,55 +174,49 @@ void SelfPlayWorker::run_search(MCTSNode* root, int num_sims) {
             if (leaves.empty()) continue;
 
             // Phase 2: Batch evaluate (deduplicated)
-            // Build unique leaves
-            std::vector<MCTSNode*> unique_leaves;
-            unique_leaves.reserve(leaves.size());
-            for (auto* leaf : leaves) {
-                bool found = false;
-                for (auto* u : unique_leaves) {
-                    if (u == leaf) { found = true; break; }
+            // Build unique leaves using leaf_to_unique map (O(n) amortized)
+            unique_leaves.clear();
+            for (size_t li = 0; li < leaves.size(); li++) {
+                MCTSNode* leaf = leaves[li];
+                // Check if already in unique_leaves via linear scan
+                // (batch sizes are small, typically <=64, so this is fast)
+                int ui = -1;
+                for (size_t j = 0; j < unique_leaves.size(); j++) {
+                    if (unique_leaves[j] == leaf) { ui = static_cast<int>(j); break; }
                 }
-                if (!found) unique_leaves.push_back(leaf);
+                if (ui < 0) {
+                    ui = static_cast<int>(unique_leaves.size());
+                    unique_leaves.push_back(leaf);
+                }
+                leaf_to_unique[li] = ui;
             }
 
             int ul_count = static_cast<int>(unique_leaves.size());
 
             // Build batch of canonical states
-            std::vector<float> batch_states(ul_count * game_.nn_input_size);
             for (int i = 0; i < ul_count; i++) {
                 game_.get_canonical_state(unique_leaves[i]->state, unique_leaves[i]->player,
                                           batch_states.data() + i * game_.nn_input_size);
             }
 
             // Batch NN eval
-            std::vector<float> batch_policies(ul_count * action_size);
-            std::vector<float> batch_values(ul_count);
-
             (*predict_fn_)(batch_states.data(), ul_count, game_.nn_input_size,
                           batch_policies.data(), batch_values.data(), action_size);
 
-            // Build map: leaf -> (policy, value)
-            struct LeafResult { float* policy; float value; };
-            std::vector<LeafResult> leaf_map(ul_count);
-            for (int i = 0; i < ul_count; i++) {
-                leaf_map[i] = {batch_policies.data() + i * action_size, batch_values[i]};
-            }
-
             // Phase 3: Revert VL, expand, backprop
-            for (auto* leaf : leaves) {
-                leaf->revert_virtual_loss();
+            for (size_t li = 0; li < leaves.size(); li++) {
+                MCTSNode* leaf = leaves[li];
+                int ui = leaf_to_unique[li];
 
-                // Find this leaf in unique_leaves
-                int ui = -1;
-                for (int i = 0; i < ul_count; i++) {
-                    if (unique_leaves[i] == leaf) { ui = i; break; }
-                }
+                leaf->revert_virtual_loss();
 
                 if (!leaf->is_expanded) {
                     game_.get_valid_moves(leaf->state, leaf->player, valid.data(), scratch_);
-                    expand_node(leaf, game_, leaf_map[ui].policy, valid.data(), arena_);
+                    expand_node(leaf, game_,
+                                batch_policies.data() + ui * action_size,
+                                valid.data(), arena_);
                 }
-                leaf->backpropagate(leaf_map[ui].value);
+                leaf->backpropagate(batch_values[ui]);
                 sims_done++;
             }
         }

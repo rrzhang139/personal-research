@@ -74,6 +74,11 @@ def generate_self_play_data(game, model, mcts_config: PyMCTSConfig,
     cpp_config = _convert_config(mcts_config)
 
     # Create predict_fn that C++ can call
+    # Import torch here to avoid import at module level
+    import torch
+
+    device = model.net.device
+
     def predict_fn(states_arr):
         """Predict function called from C++ with GIL acquired.
 
@@ -81,19 +86,20 @@ def generate_self_play_data(game, model, mcts_config: PyMCTSConfig,
             states_arr: numpy array of shape (batch_size, nn_input_size)
 
         Returns:
-            (policies, values): numpy arrays
+            (policies, values): numpy float32 arrays
         """
-        states_np = np.asarray(states_arr)
+        states_np = np.asarray(states_arr, dtype=np.float32)
         if states_np.ndim == 1:
             states_np = states_np.reshape(1, -1)
 
-        # Convert to list of 1D arrays for model.predict_batch
-        state_list = [states_np[i] for i in range(states_np.shape[0])]
-        policies, values = model.predict_batch(state_list)
-
-        # Ensure correct types
-        policies_arr = np.array(policies, dtype=np.float32)
-        values_arr = np.array(values, dtype=np.float32)
+        # Direct torch conversion — skip list roundtrip through predict_batch
+        if model.net.training:
+            model.net.eval()
+        with torch.no_grad():
+            x = torch.from_numpy(states_np).to(device)
+            log_pi, v = model.net(x)
+            policies_arr = torch.exp(log_pi).cpu().numpy()
+            values_arr = v.squeeze(-1).cpu().numpy()
 
         return policies_arr, values_arr
 

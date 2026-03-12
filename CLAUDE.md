@@ -135,4 +135,5 @@ Track your currently active instances here. Update when creating/destroying inst
 
 | Provider | Instance ID | GPUs | SSH Address | Status |
 |----------|-------------|------|-------------|--------|
-| RunPod   | n5zlohd9p3qxqj | RTX A5000 | n5zlohd9p3qxqj-64410c4b@ssh.runpod.io | STOPPED (worldmodel eval done, best.pt saved) |
+| RunPod   | j4n743n88ra45a | RTX 4090 | j4n743n88ra45a-644117b7@ssh.runpod.io | RUNNING (go9-v2 training, ~$0.34/hr) |
+| RunPod   | noecq0fv7nifkx | RTX 3090 | noecq0fv7nifkx-64410ee7@ssh.runpod.io | RUNNING (wm-train-mixed, ~$0.22/hr) |
