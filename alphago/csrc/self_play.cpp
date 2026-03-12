@@ -221,16 +221,15 @@ void SelfPlayWorker::run_search(MCTSNode* root, int num_sims) {
 }
 
 SelfPlayWorker::GameResult SelfPlayWorker::play_game() {
-    arena_.reset();
-
     int action_size = game_.n2 + 1;
     int full_sims = config_.num_simulations;
     bool use_playout_cap = config_.playout_cap_prob < 1.0f;
     int cheap_sims = std::max(1, static_cast<int>(full_sims * config_.playout_cap_cheap_fraction));
 
-    // Allocate initial state
-    float* state = arena_.alloc_state(game_.state_size);
-    game_.get_initial_state(state);
+    // Game state lives on the heap (NOT in the arena), so arena resets per move
+    // don't destroy it.
+    std::vector<float> game_state(game_.state_size);
+    game_.get_initial_state(game_state.data());
     int player = 1;
     int move_count = 0;
 
@@ -245,11 +244,16 @@ SelfPlayWorker::GameResult SelfPlayWorker::play_game() {
     std::vector<float> canonical(game_.nn_input_size);
     std::vector<float> policy_buf(action_size);
     std::vector<float> valid_buf(action_size);
+    std::vector<float> next_state(game_.state_size);
 
     std::uniform_real_distribution<float> uniform(0.0f, 1.0f);
 
     while (true) {
-        game_.get_canonical_state(state, player, canonical.data());
+        // Reset arena each move — MCTS tree only lives for one move.
+        // This prevents arena growth/realloc which would invalidate pointers.
+        arena_.reset();
+
+        game_.get_canonical_state(game_state.data(), player, canonical.data());
 
         // Decide full vs cheap
         bool is_full = !use_playout_cap || (uniform(rng_) < config_.playout_cap_prob);
@@ -268,10 +272,10 @@ SelfPlayWorker::GameResult SelfPlayWorker::play_game() {
             temp = 0.01f;
         }
 
-        // Create root
+        // Create root (in arena — will be freed on next move's reset)
         MCTSNode* root = arena_.alloc_node();
         root->state = arena_.alloc_state(game_.state_size);
-        std::memcpy(root->state, state, game_.state_size * sizeof(float));
+        std::memcpy(root->state, game_state.data(), game_.state_size * sizeof(float));
         root->player = player;
         root->action = -1;
         root->parent = nullptr;
@@ -279,7 +283,7 @@ SelfPlayWorker::GameResult SelfPlayWorker::play_game() {
         // Get initial policy for root expansion
         float root_value;
         evaluate_leaf(canonical.data(), policy_buf.data(), root_value);
-        game_.get_valid_moves(state, player, valid_buf.data(), scratch_);
+        game_.get_valid_moves(game_state.data(), player, valid_buf.data(), scratch_);
         expand_node(root, game_, policy_buf.data(), valid_buf.data(), arena_);
 
         // Add Dirichlet noise
@@ -304,15 +308,14 @@ SelfPlayWorker::GameResult SelfPlayWorker::play_game() {
         std::discrete_distribution<int> dist(pi.begin(), pi.end());
         int action = dist(rng_);
 
-        // Apply action
-        float* new_state = arena_.alloc_state(game_.state_size);
-        game_.get_next_state(state, action, player, new_state, scratch_);
-        state = new_state;
+        // Apply action — write to heap-allocated next_state, then swap
+        game_.get_next_state(game_state.data(), action, player, next_state.data(), scratch_);
+        game_state.swap(next_state);
         move_count++;
 
         // Terminal check
         float terminal_value;
-        if (game_.check_terminal(state, action, player, terminal_value, scratch_)) {
+        if (game_.check_terminal(game_state.data(), action, player, terminal_value, scratch_)) {
             // Determine outcome
             int outcome;
             if (terminal_value == 0.0f) {
