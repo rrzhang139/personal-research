@@ -5,13 +5,14 @@ Key changes from v1 (20260311_go9_optimized):
   - nn_batch_size=64 (1.66x faster on CUDA)
   - KataGo MCTS params: dirichlet_alpha=0.12, c_puct=1.0, temp_decay, FPU
   - cosine LR schedule
-  - 100 iterations × 100 games (10,000 total games)
+  - 200 iterations × 100 games (20,000 total games)
   - Standard CNN arch (with BN, no SE) — SE+no-BN caused exploding loss (14M)
+  - Optimized self-play: bytearray flood fill, fast suicide check (2.69x faster)
 
 Warm-start from playout_cap best.pt.
 
-Expected time on RTX 4090: ~4-5 hours
-Expected cost: ~$1.00 at $0.20/hr
+Expected time on RTX 4090: ~13 hours (~232s/iter self-play + training)
+Expected cost: ~$2.60 at $0.20/hr
 """
 import json
 import os
@@ -71,7 +72,7 @@ def main():
             weight_decay=1e-4,
             batch_size=256,
             epochs_per_iteration=10,
-            num_iterations=100,
+            num_iterations=200,
             games_per_iteration=100,
             max_buffer_size=200000,
             buffer_strategy="fifo",
