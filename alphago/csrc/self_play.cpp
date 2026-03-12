@@ -346,7 +346,7 @@ SelfPlayWorker::GameResult SelfPlayWorker::play_game() {
 
 std::pair<std::vector<Example>, GameStats>
 generate_self_play_data(int board_size, int num_games, const MCTSCppConfig& config,
-                        PredictFn predict_fn, int num_threads) {
+                        const PredictFn& predict_fn, int num_threads) {
     GoGame game(board_size);
 
     std::atomic<int> games_remaining(num_games);
