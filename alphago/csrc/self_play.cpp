@@ -387,14 +387,18 @@ generate_self_play_data(int board_size, int num_games, const MCTSCppConfig& conf
         }
     };
 
-    // Launch worker threads
-    std::vector<std::thread> threads;
-    for (int i = 0; i < num_threads; i++) {
-        threads.emplace_back(worker_fn, i);
-    }
-
-    for (auto& t : threads) {
-        t.join();
+    if (num_threads <= 1) {
+        // Single-threaded: run on calling thread (avoids GIL issues with std::thread)
+        worker_fn(0);
+    } else {
+        // Multi-threaded: launch worker threads
+        std::vector<std::thread> threads;
+        for (int i = 0; i < num_threads; i++) {
+            threads.emplace_back(worker_fn, i);
+        }
+        for (auto& t : threads) {
+            t.join();
+        }
     }
 
     // Compute stats
