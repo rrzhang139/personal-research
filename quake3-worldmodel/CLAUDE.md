@@ -198,6 +198,19 @@ Since scp doesn't work through RunPod gateway, options:
 - If `which pip` points to conda, vizdoom installs into wrong Python
 - Always use `uv pip install` inside activated venv
 
+### ViZDoom not in RunPod pytorch image
+- Fresh `runpod/pytorch` containers don't have vizdoom. Must `uv pip install vizdoom` after `setup_env.sh`.
+- Collect data on pod (~50s for 1000 episodes) rather than transferring ~4GB.
+
+### Fresh pods lack tmux
+- `apt-get install tmux` is slow on fresh containers. Fallback: `nohup python -u ... > /workspace/train.log 2>&1 &` then check logs in a separate SSH call.
+- Never pipe long-running commands through `tail -N` in a heredoc — it buffers and hangs the SSH session.
+
+### Action conditioning fails on random policy data
+- Random agent spins aimlessly — model learns to ignore actions (action_test ratio ~1.1x).
+- Use `--policy mixed` (70% scripted / 30% random) for coherent trajectories.
+- Test with `src/action_test.py` — ratio > 2x = PASS.
+
 ## Research Notes
 
 See `RESEARCH.md` for detailed experiment logs and hypotheses (DoomMWM multiplayer, single-view curriculum, etc.)
@@ -214,4 +227,5 @@ See `RESEARCH.md` for detailed experiment logs and hypotheses (DoomMWM multiplay
 
 | Date       | Provider | GPU      | Hours | Cost  | Purpose                    |
 |------------|----------|----------|-------|-------|----------------------------|
-| 2026-03-12 | RunPod   | RTX A5000| ~14h  | ~$3.10| Single-player baseline (small, 100ep, loss→0.032) |
+| 2026-03-12 | RunPod   | RTX A5000| ~14h  | ~$3.10| Single-player baseline (small, 100ep, random policy, loss→0.032) |
+| 2026-03-12 | RunPod   | RTX 3090 | ~17h  | ~$4   | Mixed policy retrain (small, 100ep, action conditioning fix) |
