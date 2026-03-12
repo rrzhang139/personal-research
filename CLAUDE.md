@@ -80,7 +80,8 @@ These conventions apply regardless of which provider you use:
 - **Always source env first**: `source /workspace/.bashrc_pod` (or equivalent) before any command
 - **Tmux for long-running jobs**: Always use detached tmux for training/eval. Tmux does NOT inherit parent env vars — source `.bashrc_pod` inside the tmux session.
 - **HDF5_USE_FILE_LOCKING=FALSE**: Required on NFS-backed volumes (RunPod, some Vast.ai hosts)
-- **wandb**: Log ALL experiments to Weights & Biases for tracking
+- **wandb**: Log ALL experiments to Weights & Biases for tracking. 
+- **MANDATORY: W&B Artifacts**: **ALWAYS** upload model checkpoints (best.pt, final.pt) to W&B Artifacts after every training run. Do this BEFORE stopping/terminating a pod. Pod volumes are ephemeral — if you don't upload, the checkpoint is lost. Use: `wandb.log_artifact(artifact)` with `type='model'`. This is non-negotiable.
 - **Data backup**: Pod volumes are ephemeral. Always upload checkpoints to W&B artifacts and git push code before stopping/terminating. See `providers/runpod.md` for backup procedures.
 - **Two-repo workflow (uwlab)**: The `uwlab/UWLab/` directory is a SEPARATE git repo (`rrzhang139/UWLab`, forked from `uw-lab/UWLab`). It is gitignored by personal-research. When editing UWLab source files, push from INSIDE `uwlab/UWLab/`. Always pull/push both repos: `cd /workspace/code/personal-research && git pull && cd uwlab/UWLab && git pull`.
 
@@ -134,4 +135,4 @@ Track your currently active instances here. Update when creating/destroying inst
 
 | Provider | Instance ID | GPUs | SSH Address | Status |
 |----------|-------------|------|-------------|--------|
-| (none) | — | — | — | — |
+| RunPod   | n5zlohd9p3qxqj | RTX A5000 | n5zlohd9p3qxqj-64410c4b@ssh.runpod.io | STOPPED (worldmodel eval done, best.pt saved) |

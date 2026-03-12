@@ -60,6 +60,28 @@ def compute_psnr(real: torch.Tensor, pred: torch.Tensor) -> float:
     return (10 * torch.log10(255**2 / mse)).item()
 
 
+def make_lpips_fn(device):
+    """Create LPIPS perceptual similarity function. Returns None if lpips not installed."""
+    try:
+        import lpips
+        fn = lpips.LPIPS(net="alex").to(device)
+        fn.eval()
+        return fn
+    except ImportError:
+        print("Warning: lpips not installed, skipping perceptual metrics. pip install lpips")
+        return None
+
+
+def compute_lpips(lpips_fn, real: torch.Tensor, pred: torch.Tensor) -> float:
+    """Compute LPIPS between two (C, H, W) uint8 tensors. Returns scalar."""
+    # LPIPS expects (B, C, H, W) float in [-1, 1]
+    r = real.float().unsqueeze(0) / 255 * 2 - 1
+    p = pred.float().unsqueeze(0) / 255 * 2 - 1
+    with torch.no_grad():
+        return lpips_fn(r.to(lpips_fn.parameters().__next__().device),
+                        p.to(lpips_fn.parameters().__next__().device)).item()
+
+
 def frames_to_video(frames, output_path, fps=10):
     """Write a list of (C, H, W) uint8 tensors to an MP4."""
     import imageio
@@ -106,6 +128,10 @@ def evaluate(args):
     vid_dir.mkdir(parents=True, exist_ok=True)
 
     all_psnr = []
+    all_lpips = []
+
+    # Try to load LPIPS
+    lpips_fn = make_lpips_fn(device)
 
     for ep_idx in range(min(args.num_episodes, len(episode_files))):
         ep = Episode.load(episode_files[ep_idx])
@@ -122,8 +148,17 @@ def evaluate(args):
         psnrs = [compute_psnr(r, p) for r, p in zip(real_frames, pred_frames)]
         avg_psnr = np.mean(psnrs)
         all_psnr.extend(psnrs)
-        print(f"Episode {ep_idx}: avg PSNR={avg_psnr:.2f} dB "
-              f"(frame 1: {psnrs[0]:.1f}, frame {len(psnrs)}: {psnrs[-1]:.1f})")
+
+        # LPIPS
+        if lpips_fn is not None:
+            lps = [compute_lpips(lpips_fn, r, p) for r, p in zip(real_frames, pred_frames)]
+            avg_lp = np.mean(lps)
+            all_lpips.extend(lps)
+            print(f"Episode {ep_idx}: PSNR={avg_psnr:.2f} dB, LPIPS={avg_lp:.4f} "
+                  f"(frame 1: {psnrs[0]:.1f}/{lps[0]:.3f}, frame {len(psnrs)}: {psnrs[-1]:.1f}/{lps[-1]:.3f})")
+        else:
+            print(f"Episode {ep_idx}: avg PSNR={avg_psnr:.2f} dB "
+                  f"(frame 1: {psnrs[0]:.1f}, frame {len(psnrs)}: {psnrs[-1]:.1f})")
 
         # Save 3 videos: real, predicted, side-by-side
         frames_to_video(real_frames, vid_dir / f"ep{ep_idx}_real.mp4")
@@ -132,12 +167,26 @@ def evaluate(args):
         print(f"  Saved: ep{ep_idx}_real.mp4, ep{ep_idx}_pred.mp4, ep{ep_idx}_compare.mp4")
 
     print(f"\nOverall: avg PSNR={np.mean(all_psnr):.2f} dB over {len(all_psnr)} frames")
+    if all_lpips:
+        print(f"Overall: avg LPIPS={np.mean(all_lpips):.4f} (lower=better)")
     print(f"Videos saved to {vid_dir}")
+
+    # Save metrics to file
+    metrics = {"psnr_mean": float(np.mean(all_psnr)), "psnr_per_frame": [float(x) for x in all_psnr]}
+    if all_lpips:
+        metrics["lpips_mean"] = float(np.mean(all_lpips))
+        metrics["lpips_per_frame"] = [float(x) for x in all_lpips]
+    import json
+    with open(out_dir / "metrics.json", "w") as f:
+        json.dump(metrics, f, indent=2)
 
     if args.wandb:
         import wandb
         run = wandb.init(project="quake3-worldmodel", entity="rzhang139", job_type="eval")
-        run.log({"eval/psnr_mean": np.mean(all_psnr)})
+        log_dict = {"eval/psnr_mean": np.mean(all_psnr)}
+        if all_lpips:
+            log_dict["eval/lpips_mean"] = np.mean(all_lpips)
+        run.log(log_dict)
         for f in vid_dir.glob("*_compare.mp4"):
             run.log({"eval/compare": wandb.Video(str(f))})
         for f in vid_dir.glob("*_pred.mp4"):

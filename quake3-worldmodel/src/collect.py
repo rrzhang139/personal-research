@@ -66,6 +66,50 @@ ACTIONS_V2 = [
 NUM_ACTIONS = len(ACTIONS_V2)
 
 
+class ScriptedPolicy:
+    """Simple scripted policy: mostly forward, occasional turns, shoot periodically.
+
+    Produces coherent movement sequences instead of random spinning.
+    """
+
+    def __init__(self, forward_prob=0.45, turn_prob=0.15, shoot_prob=0.10):
+        self.forward_prob = forward_prob
+        self.turn_prob = turn_prob
+        self.shoot_prob = shoot_prob
+        self._turn_dir = None  # current turn direction (persist for smoother turns)
+        self._turn_steps = 0
+
+    def __call__(self):
+        r = np.random.random()
+
+        # If mid-turn, continue for a few steps (smoother rotation)
+        if self._turn_steps > 0:
+            self._turn_steps -= 1
+            # 8: fwd+turnL, 9: fwd+turnR (move while turning)
+            return 8 if self._turn_dir == "left" else 9
+
+        # Start a new turn sequence
+        if r < self.turn_prob:
+            self._turn_dir = np.random.choice(["left", "right"])
+            self._turn_steps = np.random.randint(2, 6)  # turn for 2-6 steps
+            return 8 if self._turn_dir == "left" else 9
+
+        # Move forward (most common)
+        if r < self.turn_prob + self.forward_prob:
+            return 0  # forward
+
+        # Shoot while moving forward
+        if r < self.turn_prob + self.forward_prob + self.shoot_prob:
+            return 7  # attack + forward
+
+        # Occasional strafe
+        if r < self.turn_prob + self.forward_prob + self.shoot_prob + 0.10:
+            return np.random.choice([2, 3])  # strafe left/right
+
+        # Fallback: random action for diversity
+        return np.random.randint(NUM_ACTIONS)
+
+
 def make_game(scenario: str = "deathmatch", res: int = 84, frame_skip: int = 4) -> vzd.DoomGame:
     game = vzd.DoomGame()
 
@@ -115,12 +159,24 @@ def collect_episode(game: vzd.DoomGame, res: int = 84, frame_skip: int = 4,
     obs_list.append(frame)
 
     steps = 0
+    # Create policy
+    if policy == "random":
+        policy_fn = lambda: np.random.randint(NUM_ACTIONS)
+    elif policy == "scripted":
+        policy_fn = ScriptedPolicy()
+    elif policy == "mixed":
+        scripted = ScriptedPolicy()
+        # 70% scripted, 30% random
+        def policy_fn():
+            if np.random.random() < 0.7:
+                return scripted()
+            return np.random.randint(NUM_ACTIONS)
+    else:
+        raise ValueError(f"Unknown policy: {policy}")
+
     while not game.is_episode_finished() and steps < max_steps:
         # Select action
-        if policy == "random":
-            action_idx = np.random.randint(NUM_ACTIONS)
-        else:
-            raise ValueError(f"Unknown policy: {policy}")
+        action_idx = policy_fn()
 
         action = ACTIONS_V2[action_idx]
 
@@ -157,7 +213,9 @@ def main():
     parser.add_argument("--frame_skip", type=int, default=4)
     parser.add_argument("--max_steps", type=int, default=500,
                         help="Max steps per episode (after frame skip)")
-    parser.add_argument("--policy", type=str, default="random")
+    parser.add_argument("--policy", type=str, default="random",
+                        choices=["random", "scripted", "mixed"],
+                        help="random: uniform, scripted: forward+turns, mixed: 70%% scripted 30%% random")
     args = parser.parse_args()
 
     output_dir = Path(args.output)

@@ -368,8 +368,9 @@ class Denoiser(nn.Module):
                   (sigma_min ** (1 / rho) - sigma_max ** (1 / rho))) ** rho
         sigmas = torch.cat([sigmas, torch.zeros(1, device=device)])  # append 0
 
-        # Start from noise
-        x = torch.randn(B, self.img_channels, self.img_size, self.img_size, device=device)
+        # Start from noise (derive spatial dims from context)
+        H, W = context.shape[3], context.shape[4]
+        x = torch.randn(B, self.img_channels, H, W, device=device)
         x = x * sigmas[0]
 
         for i in range(num_steps):

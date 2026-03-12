@@ -70,6 +70,7 @@ Saved as `.pt` files with uint8 obs on disk (saves 4x space). Converted to float
 - **Project**: `rzhang139/quake3-worldmodel`
 - **Entity**: `rzhang139`
 - Log: training loss, PSNR, rollout videos, side-by-side comparisons
+- **ALWAYS upload checkpoints to W&B Artifacts** after training. Never stop a pod without uploading best.pt/final.pt first. Naming: `quake3-wm-<run_description>` type `model`.
 
 ## Data Collection
 
