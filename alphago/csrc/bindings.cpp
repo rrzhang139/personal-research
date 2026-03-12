@@ -127,17 +127,25 @@ NB_MODULE(_mcts_cpp, m) {
             int nn_input_size = (2 * NUM_HISTORY + 1) * board_size * board_size;
             int action_size = board_size * board_size + 1;
 
-            // Wrap Python callable into C++ PredictFn
+            // Wrap Python callable into C++ PredictFn.
+            // We must copy data into owned numpy arrays (not views) because
+            // nanobind ndarray with null owner is unreliable across platforms.
             PredictFn predict_fn = [predict_fn_py, nn_input_size, action_size]
                 (const float* states, int batch_size, int nn_sz,
                  float* policies_out, float* values_out, int act_sz) {
 
                 nb::gil_scoped_acquire gil;
 
-                // Create non-owning numpy view of input states
+                // Create an owned numpy array by copying the C++ data
+                size_t total = (size_t)batch_size * (size_t)nn_input_size;
+                float* data_copy = new float[total];
+                std::memcpy(data_copy, states, total * sizeof(float));
+                nb::capsule owner(data_copy, [](void* p) noexcept {
+                    delete[] static_cast<float*>(p);
+                });
                 size_t state_shape[] = {(size_t)batch_size, (size_t)nn_input_size};
-                auto states_arr = nb::ndarray<nb::numpy, const float, nb::ndim<2>>(
-                    states, 2, state_shape, nb::handle());
+                auto states_arr = nb::ndarray<nb::numpy, float, nb::ndim<2>>(
+                    data_copy, 2, state_shape, owner);
 
                 nb::object result = predict_fn_py(states_arr);
                 nb::tuple result_tuple = nb::cast<nb::tuple>(result);
