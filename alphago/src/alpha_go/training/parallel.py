@@ -84,9 +84,15 @@ _worker_model1 = None
 _worker_model2 = None
 
 
-def _worker_init(weight_bytes: bytes, info: dict):
+def _worker_init(weight_bytes: bytes, info: dict, threads_per_worker: int = 1):
     """Pool initializer: load model into process-global _worker_model."""
     global _worker_model
+    # Limit CPU threads per worker to avoid contention (default PyTorch uses ALL cores)
+    t = str(threads_per_worker)
+    os.environ['OMP_NUM_THREADS'] = t
+    os.environ['MKL_NUM_THREADS'] = t
+    import torch
+    torch.set_num_threads(threads_per_worker)
     _worker_model = _reconstruct_model(weight_bytes, info)
     # Seed with pid for game diversity
     import numpy as np
@@ -120,10 +126,12 @@ def create_pool(model, num_workers: int) -> mp.pool.Pool:
     """Create a process pool with model pre-loaded in each worker."""
     weight_bytes, info = serialize_model_state(model)
     ctx = _get_mp_context()
+    # Allocate CPU threads evenly: total cores / workers (min 1)
+    threads_per_worker = max(1, (os.cpu_count() or 1) // num_workers)
     return ctx.Pool(
         processes=num_workers,
         initializer=_worker_init,
-        initargs=(weight_bytes, info),
+        initargs=(weight_bytes, info, threads_per_worker),
     )
 
 
