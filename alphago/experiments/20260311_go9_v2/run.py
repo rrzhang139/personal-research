@@ -81,6 +81,7 @@ def main():
             lr_min=1e-5,
         ),
         arena=ArenaConfig(arena_games=0, eval_games=10),
+        num_workers=32,
         use_wandb=True,
         wandb_project="alphazero",
     )
