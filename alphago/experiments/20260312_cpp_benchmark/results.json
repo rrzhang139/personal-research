@@ -1,21 +1,22 @@
 {
   "comparison": {
-    "python_self_play_mean": 33.997,
-    "cpp_self_play_mean": 8.863,
-    "self_play_speedup": 3.836,
-    "python_total_mean": 38.879,
-    "cpp_total_mean": 13.493,
-    "total_speedup": 2.881,
-    "python_gpu_util": 9.825,
-    "cpp_gpu_util": 37.704
+    "python_self_play_mean": 34.637,
+    "cpp_self_play_mean": 6.567,
+    "self_play_speedup": 5.275,
+    "python_total_mean": 38.710,
+    "cpp_total_mean": 10.088,
+    "total_speedup": 3.837,
+    "python_gpu_util": 8.958,
+    "cpp_gpu_util": 38.505
   },
-  "python_self_play_times": [47.549, 38.614, 28.305, 26.940, 28.578],
-  "cpp_self_play_times": [13.357, 8.294, 7.859, 7.244, 7.563],
-  "python_losses": [4.646, 3.746, 3.202, 3.053, 2.970],
-  "cpp_losses": [4.469, 3.619, 3.274, 3.167, 3.119],
+  "python_self_play_times": [42.399, 39.141, 32.738, 26.966, 31.942],
+  "cpp_self_play_times": [9.389, 6.586, 5.651, 5.667, 5.541],
+  "python_losses": [4.280, 3.677, 3.491, 3.234, 3.060],
+  "cpp_losses": [4.549, 3.830, 3.481, 3.331, 3.252],
   "cpp_stability_losses": [
-    3.354, 3.111, 3.009, 2.950, 2.957, 2.910, 2.877, 2.872, 2.880, 2.907,
-    2.885, 2.905, 2.915, 2.930, 2.935, 2.938, 2.948, 2.967, 2.963, 2.965
+    3.277, 3.088, 2.926, 2.937, 2.856, 2.818, 2.857, 2.888, 2.886, 2.869,
+    2.887, 2.896, 2.915, 2.928, 2.934, 2.933, 2.933, 2.952, 2.947, 2.961
   ],
-  "stable": true
+  "stable": true,
+  "note": "v2 with optimizations: pre-alloc buffers, index dedup, direct torch callback"
 }
