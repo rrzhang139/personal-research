@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Go 9x9 v2 training — proven arch + KataGo MCTS params + batch=64.
+"""Go 9x9 v2 training — MiniZero-scale run.
 
-Key changes from v1 (20260311_go9_optimized):
-  - nn_batch_size=64 (1.66x faster on CUDA)
-  - KataGo MCTS params: dirichlet_alpha=0.12, c_puct=1.0, temp_decay, FPU
-  - cosine LR schedule
-  - 200 iterations × 100 games (20,000 total games)
-  - Standard CNN arch (with BN, no SE) — SE+no-BN caused exploding loss (14M)
-  - Optimized self-play: bytearray flood fill, fast suicide check (2.69x faster)
+Targeting MiniZero-level play (~amateur strength on 9x9).
+MiniZero used 600K games (2000/iter × 300 iters) on 4× 1080Ti.
+We do 200K games (500/iter × 400 iters) on 1× RTX 4090 with warm-start.
 
-Warm-start from playout_cap best.pt.
+Config:
+  - 200 sims (matches MiniZero)
+  - 500 games/iter × 400 iters = 200,000 total games
+  - Standard CNN (128 filters, 4 res blocks, BN)
+  - KataGo MCTS params + playout cap randomization
+  - Warm-start from v2 iter-63 checkpoint (already trained on ~6K games)
 
-Expected time on RTX 4090: ~13 hours (~232s/iter self-play + training)
-Expected cost: ~$2.60 at $0.20/hr
+Estimated time: ~130 hours on RTX 4090 (~$26 at $0.20/hr)
 """
 import json
 import os
@@ -34,9 +34,9 @@ EXPERIMENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(EXPERIMENT_DIR, 'data')
 CHECKPOINT_DIR = os.path.join(DATA_DIR, 'checkpoints')
 
-# Try warm-starting from v1, fall back to playout_cap
+# Warm-start priority: v2 best (iter 63) > playout_cap best
 WARM_STARTS = [
-    os.path.join(EXPERIMENT_DIR, '..', '20260311_go9_optimized', 'data', 'checkpoints', 'best.pt'),
+    os.path.join(CHECKPOINT_DIR, 'best.pt'),  # v2 iter-63
     os.path.join(EXPERIMENT_DIR, '..', '20260310_go9_playout_cap', 'data', 'checkpoints', 'best.pt'),
 ]
 
@@ -51,16 +51,16 @@ def main():
         seed=42,
         mcts=MCTSConfig(
             num_simulations=200,
-            c_puct=1.0,  # KataGo default
-            dirichlet_alpha=0.12,  # 10/81 for 9x9 (0.03 is for 19x19)
+            c_puct=1.0,
+            dirichlet_alpha=0.12,
             dirichlet_epsilon=0.25,
             temp_threshold=30,
-            temp_decay_halflife=19,  # KataGo-style exponential decay
-            nn_batch_size=64,  # 1.66x faster on CUDA
+            temp_decay_halflife=19,
+            nn_batch_size=64,
             playout_cap_prob=0.125,
             playout_cap_cheap_fraction=0.15,
-            fpu_reduction=0.2,  # KataGo fpuReductionMax
-            root_fpu_reduction=0.1,  # KataGo rootFpuReductionMax
+            fpu_reduction=0.2,
+            root_fpu_reduction=0.1,
         ),
         network=NetworkConfig(
             network_type="cnn",
@@ -72,8 +72,8 @@ def main():
             weight_decay=1e-4,
             batch_size=256,
             epochs_per_iteration=10,
-            num_iterations=200,
-            games_per_iteration=100,
+            num_iterations=400,
+            games_per_iteration=500,
             max_buffer_size=200000,
             buffer_strategy="fifo",
             checkpoint_dir=CHECKPOINT_DIR,
@@ -92,7 +92,7 @@ def main():
         json.dump(asdict(config), f, indent=2)
     print(f"Config saved to {config_path}")
 
-    # Create model (standard arch, same as v1)
+    # Create model
     model = create_model(game, config.network, lr=config.training.lr, weight_decay=config.training.weight_decay)
     print(f"Device: {model.net.device}")
 
