@@ -167,16 +167,17 @@ def _gpu_worker_main(worker_id: int, game_name: str, mcts_config,
     # No torch needed in workers — only game logic + numpy
     os.environ['OMP_NUM_THREADS'] = '1'
     os.environ['MKL_NUM_THREADS'] = '1'
+
+    import numpy as np
     np.random.seed(os.getpid() % (2**31))
 
-    # Import game and self-play here to avoid importing torch
     from ..games import get_game
     from .self_play import self_play_game
 
     game = get_game(game_name)
     proxy = ModelProxy(request_queue, response_queue, worker_id)
 
-    for _ in range(num_games):
+    for g in range(num_games):
         examples, outcome, diag = self_play_game(
             game, proxy, mcts_config, collect_diagnostics=True
         )
@@ -252,8 +253,8 @@ def generate_gpu_parallel_self_play(game, model, mcts_config, num_games: int,
     """
     from .self_play import SelfPlayStats
 
-    # Use fork on Linux for fast worker startup (workers don't use CUDA)
-    ctx = mp.get_context('fork') if sys.platform == 'linux' else mp.get_context('spawn')
+    # Use spawn to avoid CUDA fork issues (workers don't need torch)
+    ctx = mp.get_context('spawn')
 
     # Create queues
     request_queue = ctx.Queue()
