@@ -50,20 +50,23 @@ cat > /workspace/.env << 'ENVEOF'
 <contents of runpod/.env>
 ENVEOF
 
-# Clone repo + system setup (~2-3 min)
+# Clone hub repo (shared infra) + system setup (~2-3 min)
 cd /workspace
 git clone https://github.com/rrzhang139/personal-research.git code/personal-research 2>/dev/null || (cd code/personal-research && git pull)
 bash /workspace/code/personal-research/runpod/setup.sh
 source /workspace/.bashrc_pod
 
+# Clone project repo
+git clone https://github.com/rrzhang139/uwlab-omnireset.git code/uwlab-omnireset 2>/dev/null || (cd code/uwlab-omnireset && git pull)
+
 # Clone UWLab fork BEFORE setup_env.sh so it uses the fork (setup_env.sh skips clone if dir exists)
-cd /workspace/code/personal-research/uwlab
+cd /workspace/code/uwlab-omnireset
 git clone https://github.com/rrzhang139/UWLab.git 2>/dev/null || echo "UWLab already cloned"
 cd UWLab && git remote add upstream https://github.com/uw-lab/UWLab.git 2>/dev/null || true
 cd ..
 
 # Launch Isaac Sim install in tmux (takes ~8-10 min, SSH would timeout)
-tmux new-session -d -s setup 'source /workspace/.bashrc_pod && cd /workspace/code/personal-research/uwlab && bash setup_env.sh 2>&1 | tee /workspace/results/setup.log'
+tmux new-session -d -s setup 'source /workspace/.bashrc_pod && cd /workspace/code/uwlab-omnireset && bash setup_env.sh 2>&1 | tee /workspace/results/setup.log'
 echo "TMUX_STARTED: setup_env.sh running"
 tmux ls
 exit
@@ -93,7 +96,7 @@ ssh -tt -i ~/.ssh/runpod <SSH_ADDRESS> << 'SSHEOF'
 source /workspace/.bashrc_pod 2>/dev/null
 
 # Pull latest code (in case new scripts were pushed after pod creation)
-cd /workspace/code/personal-research && git pull
+cd /workspace/code/uwlab-omnireset && git pull
 
 # Download pretrained checkpoints (~10s)
 mkdir -p /workspace/checkpoints
@@ -101,7 +104,7 @@ wget -q -O /workspace/checkpoints/cube_state_rl_expert.pt \
   "https://s3.us-west-004.backblazeb2.com/uwlab-assets/Policies/OmniReset/cube_state_rl_expert.pt"
 
 # Apply any patches needed (e.g., adaptive resets)
-cd /workspace/code/personal-research/uwlab
+cd /workspace/code/uwlab-omnireset
 source .venv/bin/activate
 python scripts/patch_adaptive.py 2>/dev/null || echo "No patch to apply"
 

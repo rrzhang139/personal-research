@@ -18,7 +18,7 @@ source /workspace/.bashrc_pod 2>/dev/null
 WANDB_PROJECT="${WANDB_PROJECT:-omnireset}"
 WANDB_ENTITY="${WANDB_ENTITY:-}"  # leave empty for default entity
 HF_REPO="${HF_REPO:-rrzhang139/omnireset-checkpoints}"
-CHECKPOINT_DIR="/workspace/code/personal-research/uwlab/UWLab/logs/rsl_rl"
+CHECKPOINT_DIR="/workspace/code/uwlab-omnireset/UWLab/logs/rsl_rl"
 RESULTS_DIR="/workspace/results"
 WANDB_LOCAL="/workspace/wandb"
 
@@ -32,13 +32,26 @@ echo "--- [1/4] Git push ---"
 cd /workspace/code/personal-research
 if [ -n "$(git status --porcelain)" ]; then
     git add -A && git commit -m "offboard: save uncommitted changes" && git push
-    echo "Code pushed."
+    echo "Hub repo pushed."
 else
-    echo "Code already clean and pushed."
+    echo "Hub repo already clean and pushed."
 fi
 
-if [ -d "uwlab/UWLab/.git" ]; then
-    cd uwlab/UWLab
+# Push all project repos
+for proj_dir in /workspace/code/alphago /workspace/code/quake3-worldmodel /workspace/code/residual-rl /workspace/code/uwlab-omnireset; do
+    if [ -d "$proj_dir/.git" ]; then
+        cd "$proj_dir"
+        if [ -n "$(git status --porcelain)" ]; then
+            git add -A && git commit -m "offboard: save uncommitted changes" && git push
+            echo "$(basename $proj_dir) pushed."
+        else
+            echo "$(basename $proj_dir) already clean."
+        fi
+    fi
+done
+
+if [ -d "/workspace/code/uwlab-omnireset/UWLab/.git" ]; then
+    cd /workspace/code/uwlab-omnireset/UWLab
     if [ -n "$(git status --porcelain)" ]; then
         git add -A && git commit -m "offboard: save uncommitted changes" && git push
         echo "UWLab fork pushed."
@@ -53,7 +66,7 @@ echo "--- [2/4] Sync wandb runs ---"
 WANDB_SYNCED=false
 if command -v wandb &>/dev/null || pip show wandb &>/dev/null; then
     # Try to find wandb in any venv
-    for venv in /workspace/code/personal-research/uwlab/.venv /workspace/code/personal-research/residual-rl/.venv; do
+    for venv in /workspace/code/uwlab-omnireset/.venv /workspace/code/residual-rl/.venv; do
         if [ -f "$venv/bin/wandb" ]; then
             export PATH="$venv/bin:$PATH"
             break

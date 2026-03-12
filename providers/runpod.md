@@ -260,8 +260,8 @@ The `runpod/offboard.sh` script automates the full backup process with fallbacks
 # Run in tmux (it does uploads that can take minutes):
 tmux new -s offboard
 source /workspace/.bashrc_pod
-cd /workspace/code/personal-research/uwlab && source .venv/bin/activate
-export CHECKPOINT_DIR="/workspace/code/personal-research/uwlab/UWLab/logs/rsl_rl"
+cd /workspace/code/uwlab-omnireset && source .venv/bin/activate
+export CHECKPOINT_DIR="/workspace/code/uwlab-omnireset/UWLab/logs/rsl_rl"
 bash /workspace/code/personal-research/runpod/offboard.sh
 ```
 

@@ -16,10 +16,10 @@ ssh -tt -i ~/.ssh/runpod <SSH_ADDRESS> << 'SSHEOF'
 source /workspace/.bashrc_pod 2>/dev/null
 bash /workspace/code/personal-research/runpod/restart.sh
 
-# Pull latest code
+# Pull latest code (hub + project repos)
 cd /workspace/code/personal-research && git pull
-cd uwlab/UWLab && git pull origin main 2>/dev/null || true
-cd /workspace/code/personal-research
+cd /workspace/code/uwlab-omnireset && git pull 2>/dev/null || true
+cd /workspace/code/uwlab-omnireset/UWLab && git pull origin main 2>/dev/null || true
 
 # Verify
 source /workspace/.bashrc_pod 2>/dev/null

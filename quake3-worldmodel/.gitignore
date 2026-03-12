@@ -1,8 +1,0 @@
-.venv/
-data/
-experiments/
-wandb/
-__pycache__/
-*.pyc
-*.pt
-*.tar.gz

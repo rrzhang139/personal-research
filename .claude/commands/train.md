@@ -30,7 +30,7 @@ ssh -tt -i ~/.ssh/runpod <SSH_ADDRESS> << 'SSHEOF'
 source /workspace/.bashrc_pod 2>/dev/null
 tmux new-session -d -s train "bash -c '
 source /workspace/.bashrc_pod 2>/dev/null
-cd /workspace/code/personal-research/uwlab
+cd /workspace/code/uwlab-omnireset
 source .venv/bin/activate
 export ISAACSIM_ACCEPT_EULA=Y OMNI_KIT_ACCEPT_EULA=Y WANDB_PROJECT=omnireset HDF5_USE_FILE_LOCKING=FALSE
 cd UWLab

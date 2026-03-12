@@ -1,17 +1,19 @@
-# Personal Research
+# Personal Research — Shared Infrastructure
 
-Research projects and experiments.
+Shared GPU/SSH/RunPod infrastructure for research projects. Each project lives in its own repo.
 
 ## Projects
 
-### UWLab (OmniReset)
-Robotics manipulation research using Isaac Sim and OmniReset.
+| Project | Repo | Description |
+|---------|------|-------------|
+| AlphaZero | [rrzhang139/alphago](https://github.com/rrzhang139/alphago) | AlphaZero from scratch |
+| Quake3 WM | [rrzhang139/quake3-worldmodel](https://github.com/rrzhang139/quake3-worldmodel) | World model for Q3 Arena |
+| Residual RL | [rrzhang139/residual-rl](https://github.com/rrzhang139/residual-rl) | Policy Decorator |
+| UWLab | [rrzhang139/uwlab-omnireset](https://github.com/rrzhang139/uwlab-omnireset) | OmniReset for UWLab |
 
-- **Fork**: [rrzhang139/UWLab](https://github.com/rrzhang139/UWLab)
-- **Upstream**: [uw-lab/UWLab](https://github.com/uw-lab/UWLab)
-- **Docs**: [uwlab/CLAUDE.md](uwlab/CLAUDE.md)
+## What's Here
 
-### Residual RL
-Residual reinforcement learning experiments.
-
-- **Docs**: [residual-rl/README.md](residual-rl/README.md)
+- `providers/` — Provider docs (RunPod pricing, setup, SSH patterns)
+- `runpod/` — Pod lifecycle scripts (setup.sh, restart.sh, offboard.sh)
+- `CLAUDE.md` — GPU cost philosophy, SSH conventions, W&B artifact mandate
+- `.claude/commands/` — Slash commands for pod management

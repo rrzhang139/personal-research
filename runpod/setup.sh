@@ -92,7 +92,7 @@ ln -sfn /workspace/.cache/wandb /root/.cache/wandb 2>/dev/null
 
 # Helper: activate a project env
 proj() {
-    local dir="/workspace/code/personal-research/$1"
+    local dir="/workspace/code/$1"
     if [ -f "$dir/.venv/bin/activate" ]; then
         source "$dir/.venv/bin/activate"
         cd "$dir"
@@ -103,11 +103,20 @@ proj() {
 }
 ENVEOF
 
-# ---- Clone this repo ----
+# ---- Clone hub repo (shared infra) ----
 cd /workspace/code
 if [ ! -d "personal-research" ]; then
     git clone https://github.com/rrzhang139/personal-research.git
 fi
+
+# ---- Clone project repos as needed ----
+# Usage: pass PROJECT_REPOS env var (space-separated) to clone specific projects
+# e.g.: PROJECT_REPOS="alphago quake3-worldmodel" bash setup.sh
+for repo in $PROJECT_REPOS; do
+    if [ ! -d "/workspace/code/$repo" ]; then
+        git clone "https://github.com/rrzhang139/$repo.git" "/workspace/code/$repo"
+    fi
+done
 
 # ---- Install Claude Code ----
 echo "--- Installing Claude Code ---"
@@ -134,9 +143,9 @@ echo ""
 echo "Next steps:"
 echo "  source /workspace/.bashrc_pod"
 echo ""
-echo "  # Set up a project environment:"
-echo "  cd /workspace/code/personal-research/residual-rl"
-echo "  bash setup_env.sh"
+echo "  # Clone and set up a project:"
+echo "  cd /workspace/code && git clone https://github.com/rrzhang139/<project>.git"
+echo "  cd <project> && bash setup_env.sh"
 echo ""
 echo "  # Run Claude Code with skip-permissions:"
-echo "  su - dev -c 'source /workspace/.bashrc_pod && cd /workspace/code/personal-research && claude --dangerously-skip-permissions'"
+echo "  su - dev -c 'source /workspace/.bashrc_pod && cd /workspace/code/<project> && claude --dangerously-skip-permissions'"

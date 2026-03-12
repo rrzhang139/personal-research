@@ -25,10 +25,19 @@ Pick the right provider based on what you need:
 - "Does training converge on a small dataset?" → RunPod RTX 3090 spot ($0.11/hr)
 - "Full-scale production training" → RunPod 4x RTX 4090 ($1.36-1.92/hr total)
 
-## IMPORTANT: Always Check Project README
-**Before working on any project, ALWAYS read the README.md in the project root directory first.**
-- Each project folder (e.g., `residual-rl/`, `uwlab/`) may have its own README and CLAUDE.md with specific setup instructions
-- Project-specific CLAUDE.md overrides general guidelines
+## Multi-Repo Layout
+
+Each research project lives in its own standalone repo at `~/workspace/<project>/` (on pods: `/workspace/code/<project>/`).
+This hub repo contains only shared GPU/SSH/RunPod infrastructure.
+
+| Project | Repo | Description |
+|---------|------|-------------|
+| AlphaZero | `rrzhang139/alphago` | AlphaZero from scratch |
+| Quake3 WM | `rrzhang139/quake3-worldmodel` | World model for Q3 Arena |
+| Residual RL | `rrzhang139/residual-rl` | Policy Decorator |
+| UWLab | `rrzhang139/uwlab-omnireset` | OmniReset for UWLab |
+
+Each project's CLAUDE.md references `../personal-research/` for shared infra docs.
 
 ## Isaac Lab / Simulation Requirements
 Isaac Lab (Isaac Sim) has specific GPU requirements that constrain provider choice:
@@ -44,32 +53,25 @@ This means: **free GPU tiers (Colab, Kaggle) do NOT work for Isaac Lab** — the
 For pure PyTorch RL (no simulation): any CUDA GPU works, including free tiers.
 
 ## Per-Project Isolated Environments
-Each project has its own `.venv/` with project-specific dependencies. Package manager is `uv` (10-100x faster than pip).
+Each project repo has its own `.venv/` with project-specific dependencies. Package manager is `uv` (10-100x faster than pip).
 
 ```
-<repo-root>/
-├── residual-rl/
-│   ├── .venv/              # project-specific venv
-│   ├── requirements.txt    # project dependencies
-│   ├── setup_env.sh        # creates .venv and installs deps
-│   └── ...
-├── uwlab/
-│   ├── .venv/
-│   ├── setup_env.sh
-│   └── ...
-├── providers/              # provider-specific docs and scripts
-│   ├── runpod.md           # production multi-GPU
-│   └── runpod-cheap.md     # cheap 1x GPU for testing
-└── runpod/                 # RunPod lifecycle scripts
-    ├── setup.sh
-    ├── restart.sh
-    └── save.sh
+~/workspace/                         # local layout
+├── personal-research/               # this hub repo — shared infra only
+│   ├── CLAUDE.md                    # GPU/SSH/RunPod conventions
+│   ├── providers/                   # provider docs (pricing, setup)
+│   ├── runpod/                      # pod lifecycle scripts
+│   └── .claude/commands/            # slash commands
+├── alphago/                         # standalone project repo
+├── quake3-worldmodel/               # standalone project repo
+├── residual-rl/                     # standalone project repo
+└── uwlab-omnireset/                 # standalone project repo
+    └── UWLab/                       # separate fork (cloned inside)
 ```
 
-**Set up a new project:**
-1. Create `<project>/requirements.txt` with deps
-2. Create `<project>/setup_env.sh` (copy from residual-rl/setup_env.sh as template)
-3. Run: `cd <project> && bash setup_env.sh`
+**Set up a project on a pod:**
+1. Clone the project repo: `cd /workspace/code && git clone https://github.com/rrzhang139/<project>.git`
+2. Run: `cd <project> && bash setup_env.sh`
 
 ## Remote Machine Conventions (All Providers)
 These conventions apply regardless of which provider you use:
@@ -83,7 +85,7 @@ These conventions apply regardless of which provider you use:
 - **wandb**: Log ALL experiments to Weights & Biases for tracking. 
 - **MANDATORY: W&B Artifacts**: **ALWAYS** upload model checkpoints (best.pt, final.pt) to W&B Artifacts after every training run. Do this BEFORE stopping/terminating a pod. Pod volumes are ephemeral — if you don't upload, the checkpoint is lost. Use: `wandb.log_artifact(artifact)` with `type='model'`. This is non-negotiable.
 - **Data backup**: Pod volumes are ephemeral. Always upload checkpoints to W&B artifacts and git push code before stopping/terminating. See `providers/runpod.md` for backup procedures.
-- **Two-repo workflow (uwlab)**: The `uwlab/UWLab/` directory is a SEPARATE git repo (`rrzhang139/UWLab`, forked from `uw-lab/UWLab`). It is gitignored by personal-research. When editing UWLab source files, push from INSIDE `uwlab/UWLab/`. Always pull/push both repos: `cd /workspace/code/personal-research && git pull && cd uwlab/UWLab && git pull`.
+
 
 ## SSH Patterns (All Providers)
 
@@ -114,9 +116,9 @@ See each provider's doc for SSH-specific details (key path, address format, gate
 source /workspace/.bashrc_pod
 
 # Activate a project
-proj <project-name>      # if proj() helper is set up
+proj <project-name>      # if proj() helper is set up (activates /workspace/code/<project>/.venv)
 # or manually:
-source <project>/.venv/bin/activate
+cd /workspace/code/<project> && source .venv/bin/activate
 
 # Install a package
 uv pip install <package>

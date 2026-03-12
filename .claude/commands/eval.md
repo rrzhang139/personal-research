@@ -17,7 +17,7 @@ source /workspace/.bashrc_pod 2>/dev/null
 nvidia-smi --query-gpu=memory.used,memory.total --format=csv
 ps aux | grep -E "train.py|play.py" | grep -v grep | head -1
 # If using "latest", find it:
-ls -t /workspace/code/personal-research/uwlab/UWLab/logs/rsl_rl/ur5e_robotiq_2f85_reset_states_agent/*/model_*.pt 2>/dev/null | head -1
+ls -t /workspace/code/uwlab-omnireset/UWLab/logs/rsl_rl/ur5e_robotiq_2f85_reset_states_agent/*/model_*.pt 2>/dev/null | head -1
 exit
 SSHEOF
 ```
@@ -30,7 +30,7 @@ ssh -tt -i ~/.ssh/runpod <SSH_ADDRESS> << 'SSHEOF'
 source /workspace/.bashrc_pod 2>/dev/null
 tmux new-session -d -s eval "bash -c '
 source /workspace/.bashrc_pod 2>/dev/null
-cd /workspace/code/personal-research/uwlab
+cd /workspace/code/uwlab-omnireset
 source .venv/bin/activate
 export ISAACSIM_ACCEPT_EULA=Y OMNI_KIT_ACCEPT_EULA=Y WANDB_PROJECT=omnireset HDF5_USE_FILE_LOCKING=FALSE
 bash scripts/eval_wandb.sh <CHECKPOINT_PATH> <RUN_NAME> \
