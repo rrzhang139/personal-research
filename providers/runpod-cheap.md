@@ -55,6 +55,35 @@ RTX A4000 community cloud pod — **confirmed working**:
 
 **Takeaway: Try multiple GPU types if your first pick is unavailable. RTX A4000 and RTX 3080 were the most reliably available.**
 
+## GPU Driver Compatibility Matrix
+
+**CRITICAL:** RunPod community cloud machines have mixed driver versions. The CUDA toolkit
+in the container image is NOT the same as the driver version on the host.
+Common failure: pip installs latest torch (cu130, requires driver 570+) → CUDA unavailable → silent CPU fallback.
+
+| GPU (RunPod community) | Typical driver | Max CUDA | Recommended torch |
+|------------------------|---------------|----------|-------------------|
+| RTX A4000 | 550.144 | 12.4 | `cu121` or `cu124` |
+| RTX 3090 | 520.xx | 11.8 | **`cu121`** (forward compat works) |
+| RTX 3080 | 520–535 | 11.8–12.1 | `cu121` |
+| RTX A5000 | 520–550 | 11.8–12.4 | `cu121` |
+| A40 (SECURE) | 520.xx | 11.8 | **`cu121`** |
+| A100 (SECURE) | 535+ | 12.1+ | `cu121` or `cu124` |
+
+**Always install torch FIRST with explicit index, THEN verify CUDA before proceeding:**
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+python3 -c "import torch,sys; ok=torch.cuda.is_available(); print('CUDA:', ok, torch.cuda.get_device_name(0) if ok else 'FAIL'); sys.exit(0 if ok else 1)"
+```
+
+**The pod API query trick:** to get `podHostId` for SSH, you MUST include at least one non-runtime field in the query (e.g. `lastStatusChange`) — querying only `runtime { uptimeInSeconds }` returns null until the pod is fully up:
+```bash
+curl -s "https://api.runpod.io/graphql?api_key=$KEY" -H "Content-Type: application/json" \
+  -d '{"query":"{ pod(input:{podId:\"POD_ID\"}) { id lastStatusChange machine { podHostId } } }"}'
+```
+
+**Community cloud pods can be preempted within 30 seconds.** For overnight training, always use `cloudType: SECURE` or `cloudType: ALL` (prefers secure). Community is only safe for <1hr smoke tests.
+
 ## Quick Start — Creating a Cheap Test Pod
 
 ### Via API (recommended for automation)

@@ -55,6 +55,33 @@ For pure PyTorch RL (no simulation): any CUDA GPU works, including free tiers.
 ## Per-Project Isolated Environments
 Each project repo has its own `.venv/` with project-specific dependencies. Package manager is `uv` (10-100x faster than pip).
 
+**CRITICAL — PyTorch + CUDA driver compatibility on RunPod:**
+
+RunPod community cloud machines have OLDER drivers (commonly 520.xx = supports CUDA 11.8 only).
+RunPod PyTorch images (e.g. `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`) have the
+CUDA 12.4 TOOLKIT installed, but that does NOT mean the driver supports it.
+
+| CUDA version | Min driver (Linux) | PyTorch index | Verified working on RunPod |
+|--------------|-------------------|---------------|---------------------------|
+| CUDA 11.8 | 520.61 | `--index-url .../whl/cu118` | ✓ (driver 520) |
+| **CUDA 12.1** | **530.30** | **`--index-url .../whl/cu121`** | **✓ works on driver 520+** (forward compat) |
+| CUDA 12.4 | 550.54 | `--index-url .../whl/cu124` | ✗ fails on driver 520 |
+| CUDA 13.0 | 570+ | (latest pip default) | ✗ fails on driver 520 |
+
+**Rule: always pin torch to cu121 in pod scripts.** Never let pip auto-resolve torch — it will
+pull the latest cu130 which fails silently (falls back to CPU, no error until you check nvidia-smi).
+
+```bash
+# CORRECT — always do this first in pod scripts:
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+# Then verify CUDA before doing anything else:
+python3 -c "import torch,sys; assert torch.cuda.is_available(), 'CUDA not available!'; print(torch.cuda.get_device_name(0))"
+```
+
+When creating venvs: use a plain venv (NOT `--system-site-packages`) + install cu121 torch explicitly.
+The system PyTorch in the image may be cu124 which also fails if driver < 550.
+
 ```
 ~/workspace/                         # local layout
 ├── personal-research/               # this hub repo — shared infra only
@@ -137,5 +164,10 @@ Track your currently active instances here. Update when creating/destroying inst
 
 | Provider | Instance ID | GPUs | SSH Address | Status |
 |----------|-------------|------|-------------|--------|
-| RunPod   | j4n743n88ra45a | RTX 4090 | j4n743n88ra45a-644117b7@ssh.runpod.io | RUNNING (go9-v2 training, ~$0.34/hr) |
-| RunPod   | noecq0fv7nifkx | RTX 3090 | noecq0fv7nifkx-64410ee7@ssh.runpod.io | RUNNING (wm-train-mixed, ~$0.22/hr) |
+| RunPod   | p2692nt8axu6z8 | A40 (46GB) SECURE | p2692nt8axu6z8-64410b21@ssh.runpod.io | RUNNING (wm-latent-medium-60ep, ~$0.44/hr, auto-terminates) |
+
+### Recently Terminated
+| Instance | GPU | Reason | Cost Impact |
+|----------|-----|--------|-------------|
+| k2uwshg9u2kipr (multigame-batch) | RTX A4000 | Idle 16.9h after Fix C/D completed. ~$2.87 wasted on idle time. | Terminated 2026-03-13 |
+| j4n743n88ra45a (go9-v2) | RTX 4090 | Experiment complete | Terminated earlier |
